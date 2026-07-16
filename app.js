@@ -72,6 +72,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     showView(btn.dataset.view);
     if (btn.dataset.view === 'vocab') renderVocab();
+    if (btn.dataset.view === 'sources') showSourcesHome();
   });
 });
 
@@ -98,6 +99,110 @@ async function boot() {
   } catch (e) {
     console.error(e);
   }
+}
+
+/* ---------------- Fuentes (sites de notícias) ---------------- */
+
+const NEWS_SOURCES = [
+  { name: 'CNN en Español', emoji: '📡', desc: 'Actualidad y mundo', url: 'https://cnnespanol.cnn.com/' },
+  { name: 'BBC Mundo', emoji: '🌍', desc: 'Noticias internacionales', url: 'https://www.bbc.com/mundo' },
+  { name: 'El País', emoji: '📰', desc: 'España y Latinoamérica', url: 'https://elpais.com/' },
+  { name: 'Marca', emoji: '⚽', desc: 'Deportes', url: 'https://www.marca.com/' },
+  { name: 'National Geographic ES', emoji: '🌎', desc: 'Ciencia y naturaleza', url: 'https://www.nationalgeographic.com.es/' },
+  { name: 'Xataka', emoji: '💻', desc: 'Tecnología', url: 'https://www.xataka.com/' }
+];
+
+function showSourcesHome() {
+  document.getElementById('sourcesHome').classList.remove('hidden');
+  document.getElementById('sourcesHeadlines').classList.add('hidden');
+  const grid = document.getElementById('sourcesGrid');
+  grid.innerHTML = '';
+  NEWS_SOURCES.forEach(src => {
+    const card = document.createElement('div');
+    card.className = 'source-card';
+    card.innerHTML = `
+      <span class="source-emoji">${src.emoji}</span>
+      <span class="source-name">${escapeHtml(src.name)}</span>
+      <span class="source-desc">${escapeHtml(src.desc)}</span>`;
+    card.addEventListener('click', () => openSourceHeadlines(src));
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById('backFromHeadlines').addEventListener('click', showSourcesHome);
+
+async function openSourceHeadlines(src) {
+  document.getElementById('sourcesHome').classList.add('hidden');
+  document.getElementById('sourcesHeadlines').classList.remove('hidden');
+  document.getElementById('sourceSiteTitle').textContent = src.name;
+  const list = document.getElementById('headlinesList');
+  list.innerHTML = '<p class="headline-loading">Cargando noticias...</p>';
+
+  try {
+    const readerUrl = 'https://r.jina.ai/' + src.url;
+    const res = await fetch(readerUrl);
+    if (!res.ok) throw new Error('Falha ao acessar o site');
+    const raw = await res.text();
+    const headlines = parseHeadlines(raw, src.url);
+
+    if (!headlines.length) {
+      list.innerHTML = '<p class="hint">No se encontraron noticias. Intenta más tarde.</p>';
+      return;
+    }
+
+    list.innerHTML = '';
+    headlines.forEach(h => {
+      const item = document.createElement('div');
+      item.className = 'headline-item';
+      item.textContent = h.title;
+      item.addEventListener('click', () => importAndOpen(h.title, h.url));
+      list.appendChild(item);
+    });
+  } catch (e) {
+    list.innerHTML = '<p class="hint">❌ No se pudo cargar este sitio ahora. Intenta con otro.</p>';
+  }
+}
+
+// Extrai links de matérias a partir do markdown retornado pelo leitor.
+// Filtra links curtos/menu e mantém só os que parecem títulos de notícia.
+function parseHeadlines(markdown, baseUrl) {
+  const domain = new URL(baseUrl).hostname.replace('www.', '');
+  const regex = /\[([^\]]{20,160})\]\((https?:\/\/[^\s)]+)\)/g;
+  const seen = new Set();
+  const results = [];
+  let m;
+  while ((m = regex.exec(markdown)) !== null) {
+    const title = m[1].trim();
+    const url = m[2];
+    if (!url.includes(domain)) continue;
+    if (seen.has(url)) continue;
+    if (/^(inicio|home|menú|menu|contacto|suscr|login|iniciar sesión|síguenos)/i.test(title)) continue;
+    seen.add(url);
+    results.push({ title, url });
+    if (results.length >= 25) break;
+  }
+  return results;
+}
+
+async function importAndOpen(title, url) {
+  const list = document.getElementById('headlinesList');
+  list.style.opacity = '0.5';
+  try {
+    const readerUrl = 'https://r.jina.ai/' + url;
+    const res = await fetch(readerUrl);
+    if (!res.ok) throw new Error('Falha ao acessar a notícia');
+    const content = cleanImportedText(await res.text());
+
+    const saveRes = await apiPost('saveLesson', { title, source: url, content });
+    if (saveRes.error) throw new Error(saveRes.error);
+
+    await loadLessons();
+    const lesson = state.lessons.find(l => l.id === saveRes.id) || { id: saveRes.id, title, content };
+    openReader(lesson);
+  } catch (e) {
+    alert('❌ No se pudo abrir esta noticia: ' + e.message);
+  }
+  list.style.opacity = '1';
 }
 
 /* ---------------- Importar lições ---------------- */
@@ -175,10 +280,33 @@ function cleanImportedText(raw) {
     .filter(line => !/^\s*(Title|URL Source|Published Time|Warning|Markdown Content)\s*:/i.test(line))
     .join('\n');
 
+  // Remove imagens markdown: ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+
+  // Converte links markdown [texto](url) -> apenas "texto"
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+  // Remove negrito/itálico (**texto**, __texto__, *texto*, _texto_) mantendo o texto
+  text = text.replace(/(\*\*|__)(.+?)\1/g, '$2');
+  text = text.replace(/(\*|_)(.+?)\1/g, '$2');
+
+  // Remove asteriscos/underscores/colchetes soltos que sobraram da extração
+  text = text.replace(/[*_]{1,3}/g, '');
+  text = text.replace(/\[|\]/g, '');
+
   // Remove URLs soltas (http/https) que aparecem no meio do texto
   text = text.replace(/https?:\/\/\S+/g, '');
 
-  // Remove excesso de linhas em branco
+  // Remove linhas horizontais markdown (---, ***, ___)
+  text = text.replace(/^[\s]*([-*_]){3,}[\s]*$/gm, '');
+
+  // Normaliza espaços dentro de cada linha, mas preserva quebras de parágrafo
+  text = text
+    .split('\n')
+    .map(line => line.replace(/[ \t]{2,}/g, ' ').trim())
+    .join('\n');
+
+  // Remove excesso de linhas em branco (mantém no máximo uma linha vazia = 1 parágrafo)
   text = text.replace(/\n{3,}/g, '\n\n').trim();
 
   return text;
@@ -220,7 +348,30 @@ function openReader(lesson) {
   const contentEl = document.getElementById('readerContent');
   contentEl.innerHTML = '';
 
-  const tokens = tokenize(lesson.content || '');
+  const blocks = (lesson.content || '').split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  blocks.forEach(block => {
+    const headingMatch = block.match(/^(#{1,4})\s+(.*)$/);
+
+    if (headingMatch) {
+      const level = Math.min(headingMatch[1].length + 1, 4); // # -> h2, ## -> h3...
+      const el = document.createElement('h' + level);
+      el.className = 'reader-heading';
+      appendTokenizedWords(el, headingMatch[2]);
+      contentEl.appendChild(el);
+    } else {
+      const p = document.createElement('p');
+      p.className = 'reader-paragraph';
+      appendTokenizedWords(p, block);
+      contentEl.appendChild(p);
+    }
+  });
+
+  showView('reader');
+}
+
+function appendTokenizedWords(container, text) {
+  const tokens = tokenize(text);
   tokens.forEach(tok => {
     if (tok.type === 'word') {
       const span = document.createElement('span');
@@ -229,16 +380,14 @@ function openReader(lesson) {
       span.dataset.word = normalizeWord(tok.text);
       markIfSaved(span);
       span.addEventListener('click', () => openWordPopup(span));
-      contentEl.appendChild(span);
+      container.appendChild(span);
     } else {
       const span = document.createElement('span');
       span.className = 'punct';
       span.textContent = tok.text;
-      contentEl.appendChild(span);
+      container.appendChild(span);
     }
   });
-
-  showView('reader');
 }
 
 function tokenize(text) {
