@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Españolia — Aprende Español</title>
+<meta name="theme-color" content="#0d0d12">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar" id="topbar">
+  <h1 id="appTitle">Españolia</h1>
+  <button id="settingsBtn" class="icon-btn" title="Configurações">⚙️</button>
+</header>
+
+<!-- ---------- TELA: CONFIGURAÇÃO INICIAL ---------- -->
+<section id="view-setup" class="view">
+  <div class="setup-card">
+    <h2>🇪🇸 Bem-vindo(a)!</h2>
+    <p>Cole abaixo a URL do seu <strong>Google Apps Script</strong> (a que termina em <code>/exec</code>) para conectar o app à sua planilha.</p>
+    <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/XXXXX/exec">
+    <button class="btn-primary" id="saveApiUrlBtn">Conectar</button>
+    <p class="hint">Veja o passo a passo no arquivo README do projeto.</p>
+  </div>
+</section>
+
+<!-- ---------- TELA: IMPORTAR ---------- -->
+<section id="view-import" class="view">
+  <h2 class="view-title">Importar Lección</h2>
+  <div class="grid-2">
+    <button class="import-card" data-mode="url">
+      <span class="import-icon">🔗</span>
+      <span>Importar por URL</span>
+    </button>
+    <button class="import-card" data-mode="text">
+      <span class="import-icon">📝</span>
+      <span>Importar texto</span>
+    </button>
+  </div>
+
+  <div id="importForm" class="import-form hidden">
+    <input type="text" id="lessonTitle" placeholder="Título da lição">
+    <input type="text" id="lessonUrl" placeholder="Cole a URL aqui..." class="hidden">
+    <textarea id="lessonText" placeholder="Cole o texto em espanhol aqui..." rows="8" class="hidden"></textarea>
+    <button class="btn-primary" id="doImportBtn">Importar</button>
+    <p id="importStatus" class="hint"></p>
+  </div>
+
+  <h3 class="section-sub">Suas lições</h3>
+  <div id="lessonList" class="lesson-list"></div>
+</section>
+
+<!-- ---------- TELA: LEITOR ---------- -->
+<section id="view-reader" class="view">
+  <div class="reader-header">
+    <button class="icon-btn" id="backFromReader">✕</button>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <button class="icon-btn" id="deleteLessonBtn">🗑️</button>
+  </div>
+  <h2 id="readerTitle" class="reader-title"></h2>
+  <div id="readerContent" class="reader-content"></div>
+</section>
+
+<!-- ---------- TELA: VOCABULÁRIO ---------- -->
+<section id="view-vocab" class="view">
+  <h2 class="view-title">Vocabulario</h2>
+  <input type="text" id="vocabSearch" placeholder="🔍 Buscar vocabulário...">
+  <div class="vocab-filters">
+    <button class="chip active" data-filter="all">Todo</button>
+    <button class="chip" data-filter="1">Caja 1</button>
+    <button class="chip" data-filter="2">Caja 2</button>
+    <button class="chip" data-filter="5">Dominadas</button>
+  </div>
+  <div id="vocabList" class="vocab-list"></div>
+</section>
+
+<!-- ---------- TELA: FLASHCARDS ---------- -->
+<section id="view-flashcards" class="view">
+  <h2 class="view-title">Flashcards</h2>
+  <div class="flash-controls">
+    <span>Sentido:</span>
+    <button class="chip active" id="dirEsPt">ES → PT</button>
+    <button class="chip" id="dirPtEs">PT → ES</button>
+  </div>
+  <div id="flashArea" class="flash-area">
+    <p class="hint">Selecione um sentido e comece a revisar.</p>
+    <button class="btn-primary" id="startFlashBtn">Começar revisão</button>
+  </div>
+</section>
+
+<!-- ---------- POPUP DE PALAVRA ---------- -->
+<div id="wordPopup" class="word-popup hidden">
+  <div class="popup-handle"></div>
+  <div class="popup-top">
+    <span id="popupWord" class="popup-word"></span>
+    <div class="popup-actions">
+      <button id="popupSave" class="icon-btn" title="Salvar">✓</button>
+      <button id="popupDelete" class="icon-btn" title="Remover">🗑️</button>
+      <button id="popupClose" class="icon-btn" title="Fechar">✕</button>
+    </div>
+  </div>
+  <textarea id="popupTranslation" placeholder="Tradução / significado..." rows="2"></textarea>
+  <div class="popup-row">
+    <input type="text" id="popupCategory" placeholder="Categoria (verbo, viagem...)">
+    <button id="popupTranslateBtn" class="btn-secondary">Traduzir (Google)</button>
+  </div>
+  <p id="popupExample" class="popup-example"></p>
+</div>
+<div id="popupOverlay" class="popup-overlay hidden"></div>
+
+<!-- ---------- NAV INFERIOR ---------- -->
+<nav class="bottom-nav" id="bottomNav">
+  <button class="nav-btn" data-view="import">
+    <span class="nav-icon">➕</span><span>Importar</span>
+  </button>
+  <button class="nav-btn" data-view="vocab">
+    <span class="nav-icon">🔤</span><span>Vocabulario</span>
+  </button>
+  <button class="nav-btn" data-view="flashcards">
+    <span class="nav-icon">🃏</span><span>Flashcards</span>
+  </button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
