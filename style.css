@@ -104,7 +104,7 @@ html,body{
 .progress-fill{ height:100%; width:0%; background:linear-gradient(90deg,var(--gold),var(--red)); }
 .reader-title{ padding:0 4px; font-size:20px; font-weight:800; font-family:'Segoe UI', system-ui, sans-serif; }
 .reader-content{
-  padding:6px 4px 40px;
+  padding:6px 4px 100px;
   font-family: 'Georgia', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
   font-size:19px;
   line-height:1.9;
@@ -261,6 +261,29 @@ h4.reader-heading{ font-size: 1.1em; color: var(--gold); }
 }
 @keyframes spin{ to{ transform:rotate(360deg); } }
 #loadingText{ color:var(--text-dim); font-size:14px; }
+
+/* ---- Player de áudio ---- */
+.audio-player{
+  position:fixed; left:0; right:0; bottom:0; z-index:18;
+  background:var(--bg-card); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:10px;
+  padding:10px 16px max(10px, env(safe-area-inset-bottom));
+}
+.player-btn{
+  background:var(--bg-card-2); border:1px solid var(--border); color:var(--text);
+  width:42px; height:42px; border-radius:50%; font-size:16px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.player-play{ background:linear-gradient(135deg,var(--red),var(--gold)); border:none; }
+.player-select{
+  background:var(--bg-card-2); border:1px solid var(--border); color:var(--text);
+  border-radius:10px; padding:8px 6px; font-size:12px; flex:1; min-width:0;
+}
+.reader-content .word.speaking{
+  background:var(--gold) !important; color:#1a1400 !important;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+@media (min-width:700px){ .audio-player{ max-width:600px; margin:0 auto; } }
 
 /* ---- Bottom nav ---- */
 .bottom-nav{
