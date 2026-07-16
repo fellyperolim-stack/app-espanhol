@@ -230,10 +230,37 @@ h4.reader-heading{ font-size: 1.1em; color: var(--gold); }
 .headlines-list{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
 .headline-item{
   background:var(--bg-card); border:1px solid var(--border); border-radius:14px;
-  padding:14px 16px; cursor:pointer; font-size:15px; line-height:1.4;
+  padding:12px; cursor:pointer; display:flex; gap:12px; align-items:center;
 }
 .headline-item:active{ background:var(--bg-card-2); }
+.headline-thumb{
+  width:64px; height:64px; border-radius:10px; object-fit:cover; flex-shrink:0;
+  background:var(--bg-card-2);
+}
+.headline-thumb-placeholder{
+  width:64px; height:64px; border-radius:10px; flex-shrink:0;
+  background:var(--bg-card-2); display:flex; align-items:center; justify-content:center;
+  font-size:22px;
+}
+.headline-title{ font-size:15px; line-height:1.4; }
 .headline-loading{ color:var(--text-dim); text-align:center; padding:30px 0; }
+
+.source-card.add-source{
+  border-style:dashed; color:var(--gold); justify-content:center;
+}
+
+/* ---- Loading overlay ---- */
+.loading-overlay{
+  position:fixed; inset:0; z-index:50; background:rgba(13,13,18,.9);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+}
+.loading-spinner{
+  width:42px; height:42px; border-radius:50%;
+  border:3px solid var(--border); border-top-color:var(--gold);
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+#loadingText{ color:var(--text-dim); font-size:14px; }
 
 /* ---- Bottom nav ---- */
 .bottom-nav{
