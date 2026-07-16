@@ -130,7 +130,7 @@ document.getElementById('doImportBtn').addEventListener('click', async () => {
       const readerUrl = 'https://r.jina.ai/' + url;
       const res = await fetch(readerUrl);
       if (!res.ok) throw new Error('Falha ao acessar a URL');
-      content = await res.text();
+      content = cleanImportedText(await res.text());
     } catch (e) {
       statusEl.textContent = '❌ Não consegui importar essa URL. Tente colar o texto diretamente.';
       return;
@@ -155,6 +155,34 @@ document.getElementById('doImportBtn').addEventListener('click', async () => {
     statusEl.textContent = '❌ Erro ao salvar: ' + e.message;
   }
 });
+
+// Remove os metadados que o serviço de extração (r.jina.ai) coloca antes
+// do conteúdo real ("Title:", "URL Source:", "Published Time:", etc.)
+// e também remove linhas soltas de URL que atrapalham a leitura.
+function cleanImportedText(raw) {
+  let text = raw;
+
+  // O conteúdo de verdade começa depois de "Markdown Content:"
+  const marker = 'Markdown Content:';
+  const idx = text.indexOf(marker);
+  if (idx !== -1) {
+    text = text.substring(idx + marker.length);
+  }
+
+  // Remove linhas de metadado que sobrarem (Title:, URL Source:, Published Time:)
+  text = text
+    .split('\n')
+    .filter(line => !/^\s*(Title|URL Source|Published Time|Warning|Markdown Content)\s*:/i.test(line))
+    .join('\n');
+
+  // Remove URLs soltas (http/https) que aparecem no meio do texto
+  text = text.replace(/https?:\/\/\S+/g, '');
+
+  // Remove excesso de linhas em branco
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  return text;
+}
 
 async function loadLessons() {
   const res = await api('getLessons');
@@ -303,32 +331,47 @@ document.getElementById('popupSave').addEventListener('click', async () => {
   const translation = document.getElementById('popupTranslation').value.trim();
   const category = document.getElementById('popupCategory').value.trim();
   const example = getContextSentence(state.activeWordEl);
+  const wordSpan = state.activeWordEl;
 
-  try {
-    if (popupContext.existing) {
-      await api('updateWord', {
-        id: popupContext.existing.id, translation, category
-      });
-    } else {
-      await api('saveWord', {
-        word: popupContext.rawText, translation, category, example
-      });
+  // Fecha o popup e atualiza a tela na hora (não espera a rede)
+  closeWordPopup();
+
+  if (popupContext.existing) {
+    // Atualiza localmente
+    Object.assign(popupContext.existing, { translation, category });
+    markIfSaved(wordSpan);
+    api('updateWord', { id: popupContext.existing.id, translation, category })
+      .catch(e => console.error('Erro ao atualizar:', e));
+  } else {
+    // Cria um item temporário local com id provisório até a API responder
+    const tempId = 'temp_' + Date.now();
+    const newItem = {
+      id: tempId, word: popupContext.rawText, translation, category, example,
+      box: 1, dateAdded: new Date().toISOString()
+    };
+    state.vocab.push(newItem);
+    markIfSaved(wordSpan);
+    try {
+      const res = await api('saveWord', { word: popupContext.rawText, translation, category, example });
+      if (res.id) newItem.id = res.id; // troca pelo id real da planilha
+    } catch (e) {
+      console.error('Erro ao salvar:', e);
     }
-    await loadVocab();
-    markIfSaved(state.activeWordEl);
-    closeWordPopup();
-  } catch (e) {
-    alert('Erro ao salvar: ' + e.message);
   }
 });
 
 document.getElementById('popupDelete').addEventListener('click', async () => {
   if (!popupContext || !popupContext.existing) return;
   if (!confirm('Remover esta palavra do vocabulário?')) return;
-  await api('deleteWord', { id: popupContext.existing.id });
-  await loadVocab();
-  markIfSaved(state.activeWordEl);
+  const wordSpan = state.activeWordEl;
+  const id = popupContext.existing.id;
+
+  // Remove localmente e fecha na hora
+  state.vocab = state.vocab.filter(v => v.id !== id);
+  markIfSaved(wordSpan);
   closeWordPopup();
+
+  api('deleteWord', { id }).catch(e => console.error('Erro ao remover:', e));
 });
 
 /* ---------------- Vocabulário ---------------- */
@@ -463,13 +506,22 @@ function renderFlashcard() {
 async function answerFlash(result) {
   const fc = state.flashcards;
   const item = fc.queue[fc.index];
-  try {
-    await api('reviewWord', { id: item.id, result });
-  } catch (e) { console.error(e); }
+
+  // Avança pro próximo card imediatamente — não espera a rede
   fc.index++;
   fc.flipped = false;
   renderFlashcard();
-  loadVocab(); // atualiza caixas em segundo plano
+
+  // Atualiza a caixa localmente (mesma regra do backend) e salva em segundo plano
+  const BOX_INTERVALS = [0, 1, 2, 4, 7, 15];
+  let box = Number(item.box) || 1;
+  box = result === 'correct' ? Math.min(box + 1, BOX_INTERVALS.length - 1) : 1;
+  const nextDate = new Date();
+  nextDate.setDate(nextDate.getDate() + BOX_INTERVALS[box]);
+  item.box = box;
+  item.nextReview = nextDate.toISOString();
+
+  api('reviewWord', { id: item.id, result }).catch(e => console.error(e));
 }
 
 /* ---------------- Helpers ---------------- */
