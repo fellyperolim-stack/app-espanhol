@@ -5,7 +5,17 @@
    ======================================================= */
 
 const LS_API_URL = 'espanolia_api_url';
-let API_URL = localStorage.getItem(LS_API_URL) || '';
+
+// ---------------------------------------------------------------
+// Cole aqui a URL do seu Apps Script (a que termina em /exec).
+// Preenchendo isso, o app conecta sozinho e nunca mais pede a tela
+// de configuração — nem em outro navegador ou celular.
+// Exemplo: 'https://script.google.com/macros/s/AKfycb.../exec'
+// ---------------------------------------------------------------
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyuOQsM1xVM-E-_08YEO-gE5MaCBrycFI7iyuw6uKyla9um_je6uX6AHMeoDsq654WJ/exec';
+
+let API_URL = localStorage.getItem(LS_API_URL) || DEFAULT_API_URL || '';
+if (DEFAULT_API_URL) localStorage.setItem(LS_API_URL, DEFAULT_API_URL);
 
 let state = {
   view: 'import',
