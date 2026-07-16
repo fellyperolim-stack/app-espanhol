@@ -63,6 +63,19 @@
   </div>
   <h2 id="readerTitle" class="reader-title"></h2>
   <div id="readerContent" class="reader-content"></div>
+
+  <!-- Player de áudio (leitura em voz alta) -->
+  <div class="audio-player" id="audioPlayer">
+    <button class="player-btn player-play" id="playPauseBtn" title="Reproducir">▶️</button>
+    <button class="player-btn" id="stopBtn" title="Detener">⏹️</button>
+    <select id="voiceSelect" class="player-select" title="Voz"></select>
+    <select id="rateSelect" class="player-select" title="Velocidad">
+      <option value="0.75">0.75x</option>
+      <option value="1" selected>1x</option>
+      <option value="1.25">1.25x</option>
+      <option value="1.5">1.5x</option>
+    </select>
+  </div>
 </section>
 
 <!-- ---------- TELA: VOCABULÁRIO ---------- -->
