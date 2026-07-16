@@ -101,6 +101,131 @@ async function boot() {
   }
 }
 
+/* ---------------- Leitor em voz alta (Text-to-Speech) ---------------- */
+
+const LS_VOICE = 'espanolia_voice';
+const LS_RATE = 'espanolia_rate';
+
+let tts = {
+  blocks: [],      // elementos (parágrafos/títulos) na ordem de leitura
+  index: 0,
+  playing: false,
+  voice: null,
+  rate: Number(localStorage.getItem(LS_RATE)) || 1
+};
+
+function populateVoiceList() {
+  const select = document.getElementById('voiceSelect');
+  const voices = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith('es'));
+  if (!voices.length) return; // vozes ainda não carregaram, tenta de novo depois
+
+  const savedName = localStorage.getItem(LS_VOICE);
+  select.innerHTML = '';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = `${v.name} (${v.lang})`;
+    select.appendChild(opt);
+  });
+
+  const match = voices.find(v => v.name === savedName) || voices.find(v => v.lang === 'es-ES') || voices[0];
+  select.value = match.name;
+  tts.voice = match;
+}
+
+if ('speechSynthesis' in window) {
+  populateVoiceList();
+  speechSynthesis.onvoiceschanged = populateVoiceList;
+}
+
+document.getElementById('voiceSelect').addEventListener('change', (e) => {
+  const voices = speechSynthesis.getVoices();
+  tts.voice = voices.find(v => v.name === e.target.value) || null;
+  localStorage.setItem(LS_VOICE, e.target.value);
+});
+
+document.getElementById('rateSelect').addEventListener('change', (e) => {
+  tts.rate = Number(e.target.value);
+  localStorage.setItem(LS_RATE, String(tts.rate));
+});
+
+function resetTTS() {
+  speechSynthesis.cancel();
+  clearSpeakingHighlight();
+  tts.playing = false;
+  tts.index = 0;
+  document.getElementById('playPauseBtn').textContent = '▶️';
+}
+
+function clearSpeakingHighlight() {
+  document.querySelectorAll('.word.speaking').forEach(el => el.classList.remove('speaking'));
+}
+
+document.getElementById('playPauseBtn').addEventListener('click', () => {
+  if (!('speechSynthesis' in window)) {
+    alert('Tu navegador no soporta lectura en voz alta.');
+    return;
+  }
+  if (tts.playing) {
+    speechSynthesis.pause();
+    tts.playing = false;
+    document.getElementById('playPauseBtn').textContent = '▶️';
+  } else if (speechSynthesis.paused) {
+    speechSynthesis.resume();
+    tts.playing = true;
+    document.getElementById('playPauseBtn').textContent = '⏸️';
+  } else {
+    tts.blocks = Array.from(document.querySelectorAll('#readerContent .reader-paragraph, #readerContent .reader-heading'));
+    tts.index = 0;
+    tts.playing = true;
+    document.getElementById('playPauseBtn').textContent = '⏸️';
+    speakBlock();
+  }
+});
+
+document.getElementById('stopBtn').addEventListener('click', resetTTS);
+
+function speakBlock() {
+  if (tts.index >= tts.blocks.length) { resetTTS(); return; }
+
+  const blockEl = tts.blocks[tts.index];
+  const text = blockEl.textContent;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'es-ES';
+  if (tts.voice) utterance.voice = tts.voice;
+  utterance.rate = tts.rate;
+
+  // Destaca a palavra sendo lida em tempo real, quando o navegador suporta
+  utterance.onboundary = (ev) => {
+    if (ev.name !== 'word' && ev.name !== undefined) { /* alguns navegadores não passam 'name' */ }
+    highlightCharIndex(blockEl, ev.charIndex);
+  };
+
+  utterance.onend = () => {
+    clearSpeakingHighlight();
+    if (tts.playing) { tts.index++; speakBlock(); }
+  };
+  utterance.onerror = () => { resetTTS(); };
+
+  blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  speechSynthesis.speak(utterance);
+}
+
+function highlightCharIndex(blockEl, charIndex) {
+  clearSpeakingHighlight();
+  let acc = 0;
+  for (const node of blockEl.childNodes) {
+    const len = (node.textContent || '').length;
+    if (charIndex >= acc && charIndex < acc + len) {
+      if (node.nodeType === 1 && node.classList && node.classList.contains('word')) {
+        node.classList.add('speaking');
+      }
+      break;
+    }
+    acc += len;
+  }
+}
+
 /* ---------------- Fuentes (sites de notícias) ---------------- */
 
 const LS_CUSTOM_SOURCES = 'espanolia_custom_sources';
@@ -414,6 +539,7 @@ function renderLessonList() {
 /* ---------------- Leitor ---------------- */
 
 function openReader(lesson) {
+  if (typeof resetTTS === 'function') resetTTS();
   state.currentLesson = lesson;
   document.getElementById('readerTitle').textContent = lesson.title;
   const contentEl = document.getElementById('readerContent');
@@ -481,11 +607,12 @@ function markIfSaved(span) {
   if (found) span.classList.add('saved-' + (found.box || 1));
 }
 
-document.getElementById('backFromReader').addEventListener('click', () => showView('import'));
+document.getElementById('backFromReader').addEventListener('click', () => { resetTTS(); showView('import'); });
 
 document.getElementById('deleteLessonBtn').addEventListener('click', async () => {
   if (!state.currentLesson) return;
   if (!confirm('Excluir esta lição?')) return;
+  resetTTS();
   await api('deleteLesson', { id: state.currentLesson.id });
   await loadLessons();
   showView('import');
