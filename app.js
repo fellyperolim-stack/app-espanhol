@@ -103,7 +103,9 @@ async function boot() {
 
 /* ---------------- Fuentes (sites de notícias) ---------------- */
 
-const NEWS_SOURCES = [
+const LS_CUSTOM_SOURCES = 'espanolia_custom_sources';
+
+const DEFAULT_SOURCES = [
   { name: 'CNN en Español', emoji: '📡', desc: 'Actualidad y mundo', url: 'https://cnnespanol.cnn.com/' },
   { name: 'BBC Mundo', emoji: '🌍', desc: 'Noticias internacionales', url: 'https://www.bbc.com/mundo' },
   { name: 'El País', emoji: '📰', desc: 'España y Latinoamérica', url: 'https://elpais.com/' },
@@ -112,12 +114,26 @@ const NEWS_SOURCES = [
   { name: 'Xataka', emoji: '💻', desc: 'Tecnología', url: 'https://www.xataka.com/' }
 ];
 
+function getCustomSources() {
+  try { return JSON.parse(localStorage.getItem(LS_CUSTOM_SOURCES) || '[]'); }
+  catch (e) { return []; }
+}
+function saveCustomSources(list) {
+  localStorage.setItem(LS_CUSTOM_SOURCES, JSON.stringify(list));
+}
+function allSources() {
+  const custom = getCustomSources().map(s => ({ ...s, emoji: '🔗', desc: 'Añadido por ti', custom: true }));
+  return [...DEFAULT_SOURCES, ...custom];
+}
+
 function showSourcesHome() {
   document.getElementById('sourcesHome').classList.remove('hidden');
+  document.getElementById('addSourceForm').classList.add('hidden');
   document.getElementById('sourcesHeadlines').classList.add('hidden');
   const grid = document.getElementById('sourcesGrid');
   grid.innerHTML = '';
-  NEWS_SOURCES.forEach(src => {
+
+  allSources().forEach(src => {
     const card = document.createElement('div');
     card.className = 'source-card';
     card.innerHTML = `
@@ -125,14 +141,61 @@ function showSourcesHome() {
       <span class="source-name">${escapeHtml(src.name)}</span>
       <span class="source-desc">${escapeHtml(src.desc)}</span>`;
     card.addEventListener('click', () => openSourceHeadlines(src));
+    if (src.custom) {
+      card.addEventListener('contextmenu', (e) => { e.preventDefault(); removeCustomSource(src); });
+      card.title = 'Toca y mantén presionado para eliminar';
+      let pressTimer;
+      card.addEventListener('touchstart', () => { pressTimer = setTimeout(() => removeCustomSource(src), 700); });
+      card.addEventListener('touchend', () => clearTimeout(pressTimer));
+    }
     grid.appendChild(card);
   });
+
+  const addCard = document.createElement('div');
+  addCard.className = 'source-card add-source';
+  addCard.innerHTML = `<span class="source-emoji">➕</span><span class="source-name">Añadir fuente</span>`;
+  addCard.addEventListener('click', () => {
+    document.getElementById('addSourceForm').classList.remove('hidden');
+  });
+  grid.appendChild(addCard);
 }
+
+function removeCustomSource(src) {
+  if (!confirm(`¿Eliminar "${src.name}"?`)) return;
+  const list = getCustomSources().filter(s => s.url !== src.url);
+  saveCustomSources(list);
+  showSourcesHome();
+}
+
+document.getElementById('saveSourceBtn').addEventListener('click', () => {
+  const name = document.getElementById('newSourceName').value.trim();
+  let url = document.getElementById('newSourceUrl').value.trim();
+  if (!name || !url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  const list = getCustomSources();
+  list.push({ name, url });
+  saveCustomSources(list);
+
+  document.getElementById('newSourceName').value = '';
+  document.getElementById('newSourceUrl').value = '';
+  document.getElementById('addSourceForm').classList.add('hidden');
+  showSourcesHome();
+});
 
 document.getElementById('backFromHeadlines').addEventListener('click', showSourcesHome);
 
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
 async function openSourceHeadlines(src) {
   document.getElementById('sourcesHome').classList.add('hidden');
+  document.getElementById('addSourceForm').classList.add('hidden');
   document.getElementById('sourcesHeadlines').classList.remove('hidden');
   document.getElementById('sourceSiteTitle').textContent = src.name;
   const list = document.getElementById('headlinesList');
@@ -154,7 +217,13 @@ async function openSourceHeadlines(src) {
     headlines.forEach(h => {
       const item = document.createElement('div');
       item.className = 'headline-item';
-      item.textContent = h.title;
+      item.innerHTML = h.image
+        ? `<img class="headline-thumb" src="${h.image}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'headline-thumb-placeholder',textContent:'📰'}))">`
+        : `<div class="headline-thumb-placeholder">📰</div>`;
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'headline-title';
+      titleSpan.textContent = h.title;
+      item.appendChild(titleSpan);
       item.addEventListener('click', () => importAndOpen(h.title, h.url));
       list.appendChild(item);
     });
@@ -163,30 +232,31 @@ async function openSourceHeadlines(src) {
   }
 }
 
-// Extrai links de matérias a partir do markdown retornado pelo leitor.
-// Filtra links curtos/menu e mantém só os que parecem títulos de notícia.
+// Extrai links de matérias (e a imagem associada, se houver) a partir do
+// markdown retornado pelo leitor. Filtra links curtos/menu.
 function parseHeadlines(markdown, baseUrl) {
   const domain = new URL(baseUrl).hostname.replace('www.', '');
-  const regex = /\[([^\]]{20,160})\]\((https?:\/\/[^\s)]+)\)/g;
+  // Captura opcionalmente uma imagem logo antes do link do título
+  const regex = /(?:!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)[^\[]{0,200})?\[([^\]]{20,160})\]\((https?:\/\/[^\s)]+)\)/g;
   const seen = new Set();
   const results = [];
   let m;
   while ((m = regex.exec(markdown)) !== null) {
-    const title = m[1].trim();
-    const url = m[2];
+    const image = m[1] || null;
+    const title = m[2].trim();
+    const url = m[3];
     if (!url.includes(domain)) continue;
     if (seen.has(url)) continue;
-    if (/^(inicio|home|menú|menu|contacto|suscr|login|iniciar sesión|síguenos)/i.test(title)) continue;
+    if (/^(inicio|home|menú|menu|contacto|suscr|login|iniciar sesión|síguenos|política de|aviso legal)/i.test(title)) continue;
     seen.add(url);
-    results.push({ title, url });
+    results.push({ title, url, image });
     if (results.length >= 25) break;
   }
   return results;
 }
 
 async function importAndOpen(title, url) {
-  const list = document.getElementById('headlinesList');
-  list.style.opacity = '0.5';
+  showLoading('Cargando noticia...');
   try {
     const readerUrl = 'https://r.jina.ai/' + url;
     const res = await fetch(readerUrl);
@@ -198,11 +268,12 @@ async function importAndOpen(title, url) {
 
     await loadLessons();
     const lesson = state.lessons.find(l => l.id === saveRes.id) || { id: saveRes.id, title, content };
+    hideLoading();
     openReader(lesson);
   } catch (e) {
+    hideLoading();
     alert('❌ No se pudo abrir esta noticia: ' + e.message);
   }
-  list.style.opacity = '1';
 }
 
 /* ---------------- Importar lições ---------------- */
