@@ -100,6 +100,12 @@
     <div id="sourcesGrid" class="sources-grid"></div>
   </div>
 
+  <div id="addSourceForm" class="import-form hidden">
+    <input type="text" id="newSourceName" placeholder="Nombre del sitio (ej: El Mundo)">
+    <input type="text" id="newSourceUrl" placeholder="URL del sitio (ej: https://elmundo.es)">
+    <button class="btn-primary" id="saveSourceBtn">Añadir fuente</button>
+  </div>
+
   <div id="sourcesHeadlines" class="hidden">
     <div class="reader-header" style="padding:0 0 12px;">
       <button class="icon-btn" id="backFromHeadlines">←</button>
@@ -108,6 +114,12 @@
     <div id="headlinesList" class="headlines-list"></div>
   </div>
 </section>
+
+<!-- ---------- OVERLAY DE CARREGAMENTO ---------- -->
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="loading-spinner"></div>
+  <p id="loadingText">Cargando...</p>
+</div>
 
 <!-- ---------- POPUP DE PALAVRA ---------- -->
 <div id="wordPopup" class="word-popup hidden">
