@@ -119,28 +119,47 @@ let tts = {
   rate: Number(localStorage.getItem(LS_RATE)) || 1
 };
 
-function populateVoiceList(retries = 5) {
+function populateVoiceList(retries = 10) {
   const select = document.getElementById('voiceSelect');
-  const voices = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith('es'));
+  const allVoices = speechSynthesis.getVoices();
+  const voices = allVoices.filter(v => v.lang.toLowerCase().startsWith('es'));
 
-  if (!voices.length) {
-    // Em alguns celulares as vozes demoram para carregar — tenta de novo por alguns segundos
-    if (retries > 0) setTimeout(() => populateVoiceList(retries - 1), 400);
+  if (!allVoices.length && retries > 0) {
+    // Nenhuma voz carregou ainda (comum em alguns celulares) — tenta de novo
+    setTimeout(() => populateVoiceList(retries - 1), 500);
     return;
   }
 
-  const savedName = localStorage.getItem(LS_VOICE);
   select.innerHTML = '';
-  voices.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v.name;
-    opt.textContent = `${v.name} (${v.lang})`;
-    select.appendChild(opt);
-  });
 
-  const match = voices.find(v => v.name === savedName) || voices.find(v => v.lang === 'es-ES') || voices[0];
-  select.value = match.name;
-  tts.voice = match;
+  if (voices.length) {
+    const savedName = localStorage.getItem(LS_VOICE);
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      select.appendChild(opt);
+    });
+    const match = voices.find(v => v.name === savedName) || voices.find(v => v.lang === 'es-ES') || voices[0];
+    select.value = match.name;
+    tts.voice = match;
+  } else if (allVoices.length) {
+    // Não achou voz em espanhol, mas existem outras — mostra todas como reserva
+    allVoices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      select.appendChild(opt);
+    });
+    tts.voice = allVoices[0];
+    console.warn('Nenhuma voz em espanhol encontrada. Usando voz disponível: ' + allVoices[0].name);
+  } else {
+    // De verdade não tem nenhuma voz disponível neste navegador
+    const opt = document.createElement('option');
+    opt.textContent = 'Sin voces — abre en Chrome';
+    select.appendChild(opt);
+    tts.voice = null;
+  }
 }
 
 if ('speechSynthesis' in window) {
@@ -152,6 +171,10 @@ document.getElementById('voiceSelect').addEventListener('change', (e) => {
   const voices = speechSynthesis.getVoices();
   tts.voice = voices.find(v => v.name === e.target.value) || null;
   localStorage.setItem(LS_VOICE, e.target.value);
+});
+
+document.getElementById('reloadVoicesBtn').addEventListener('click', () => {
+  populateVoiceList();
 });
 
 document.getElementById('rateSelect').addEventListener('change', (e) => {
