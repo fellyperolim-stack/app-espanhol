@@ -92,6 +92,23 @@
   </div>
 </section>
 
+<!-- ---------- TELA: FUENTES (sites de notícias) ---------- -->
+<section id="view-sources" class="view">
+  <div id="sourcesHome">
+    <h2 class="view-title">Fuentes de noticias</h2>
+    <p class="hint">Elige un sitio, toca una noticia y ella se abre directo en el lector.</p>
+    <div id="sourcesGrid" class="sources-grid"></div>
+  </div>
+
+  <div id="sourcesHeadlines" class="hidden">
+    <div class="reader-header" style="padding:0 0 12px;">
+      <button class="icon-btn" id="backFromHeadlines">←</button>
+      <h2 id="sourceSiteTitle" class="reader-title" style="flex:1;"></h2>
+    </div>
+    <div id="headlinesList" class="headlines-list"></div>
+  </div>
+</section>
+
 <!-- ---------- POPUP DE PALAVRA ---------- -->
 <div id="wordPopup" class="word-popup hidden">
   <div class="popup-handle"></div>
@@ -116,6 +133,9 @@
 <nav class="bottom-nav" id="bottomNav">
   <button class="nav-btn" data-view="import">
     <span class="nav-icon">➕</span><span>Importar</span>
+  </button>
+  <button class="nav-btn" data-view="sources">
+    <span class="nav-icon">📰</span><span>Fuentes</span>
   </button>
   <button class="nav-btn" data-view="vocab">
     <span class="nav-icon">🔤</span><span>Vocabulario</span>
