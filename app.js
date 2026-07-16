@@ -28,18 +28,33 @@ let state = {
 
 /* ---------------- Utilidades de API ---------------- */
 
-async function api(action, params = {}, method = 'GET') {
+async function api(action, params = {}) {
   if (!API_URL) throw new Error('API não configurada');
-  if (method === 'GET') {
-    const qs = new URLSearchParams({ action, ...params }).toString();
-    const res = await fetch(`${API_URL}?${qs}`);
-    return res.json();
-  } else {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action, ...params })
-    });
-    return res.json();
+  const qs = new URLSearchParams({ action, ...params }).toString();
+  const res = await fetch(`${API_URL}?${qs}`);
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Resposta inesperada da API:', raw.slice(0, 300));
+    throw new Error('A API não retornou JSON. Verifique se a implantação do Apps Script está com acesso "Qualquer pessoa" e se foi criada uma NOVA VERSÃO após a última edição do código.');
+  }
+}
+
+// Usado só para textos longos (lições), que não cabem numa URL GET.
+async function apiPost(action, params = {}) {
+  if (!API_URL) throw new Error('API não configurada');
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS
+    body: JSON.stringify({ action, ...params })
+  });
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Resposta inesperada da API:', raw.slice(0, 300));
+    throw new Error('A API não retornou JSON ao importar a lição. Tente novamente ou verifique a implantação do Apps Script.');
   }
 }
 
@@ -128,7 +143,7 @@ document.getElementById('doImportBtn').addEventListener('click', async () => {
 
   statusEl.textContent = 'Salvando na sua planilha...';
   try {
-    const res = await api('saveLesson', { title, source, content }, 'POST');
+    const res = await apiPost('saveLesson', { title, source, content });
     if (res.error) throw new Error(res.error);
     statusEl.textContent = '✅ Lição importada!';
     document.getElementById('lessonTitle').value = '';
@@ -223,7 +238,7 @@ document.getElementById('backFromReader').addEventListener('click', () => showVi
 document.getElementById('deleteLessonBtn').addEventListener('click', async () => {
   if (!state.currentLesson) return;
   if (!confirm('Excluir esta lição?')) return;
-  await api('deleteLesson', { id: state.currentLesson.id }, 'POST');
+  await api('deleteLesson', { id: state.currentLesson.id });
   await loadLessons();
   showView('import');
 });
@@ -293,11 +308,11 @@ document.getElementById('popupSave').addEventListener('click', async () => {
     if (popupContext.existing) {
       await api('updateWord', {
         id: popupContext.existing.id, translation, category
-      }, 'POST');
+      });
     } else {
       await api('saveWord', {
         word: popupContext.rawText, translation, category, example
-      }, 'POST');
+      });
     }
     await loadVocab();
     markIfSaved(state.activeWordEl);
@@ -310,7 +325,7 @@ document.getElementById('popupSave').addEventListener('click', async () => {
 document.getElementById('popupDelete').addEventListener('click', async () => {
   if (!popupContext || !popupContext.existing) return;
   if (!confirm('Remover esta palavra do vocabulário?')) return;
-  await api('deleteWord', { id: popupContext.existing.id }, 'POST');
+  await api('deleteWord', { id: popupContext.existing.id });
   await loadVocab();
   markIfSaved(state.activeWordEl);
   closeWordPopup();
@@ -449,7 +464,7 @@ async function answerFlash(result) {
   const fc = state.flashcards;
   const item = fc.queue[fc.index];
   try {
-    await api('reviewWord', { id: item.id, result }, 'POST');
+    await api('reviewWord', { id: item.id, result });
   } catch (e) { console.error(e); }
   fc.index++;
   fc.flipped = false;
