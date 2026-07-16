@@ -81,6 +81,11 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
   showView('setup');
 });
 
+document.getElementById('appTitle').addEventListener('click', () => {
+  if (typeof resetTTS === 'function') resetTTS();
+  showView('import');
+});
+
 /* ---------------- Setup inicial ---------------- */
 
 document.getElementById('saveApiUrlBtn').addEventListener('click', async () => {
@@ -114,10 +119,15 @@ let tts = {
   rate: Number(localStorage.getItem(LS_RATE)) || 1
 };
 
-function populateVoiceList() {
+function populateVoiceList(retries = 5) {
   const select = document.getElementById('voiceSelect');
   const voices = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith('es'));
-  if (!voices.length) return; // vozes ainda não carregaram, tenta de novo depois
+
+  if (!voices.length) {
+    // Em alguns celulares as vozes demoram para carregar — tenta de novo por alguns segundos
+    if (retries > 0) setTimeout(() => populateVoiceList(retries - 1), 400);
+    return;
+  }
 
   const savedName = localStorage.getItem(LS_VOICE);
   select.innerHTML = '';
@@ -191,8 +201,12 @@ function speakBlock() {
   const blockEl = tts.blocks[tts.index];
   const text = blockEl.textContent;
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'es-ES';
-  if (tts.voice) utterance.voice = tts.voice;
+  if (tts.voice) {
+    utterance.voice = tts.voice;
+    utterance.lang = tts.voice.lang;
+  } else {
+    utterance.lang = 'es-ES'; // reserva, caso nenhuma voz específica tenha sido carregada ainda
+  }
   utterance.rate = tts.rate;
 
   // Destaca a palavra sendo lida em tempo real, quando o navegador suporta
