@@ -59,10 +59,19 @@
   <div class="reader-header">
     <button class="icon-btn" id="backFromReader">✕</button>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <button class="icon-btn" id="multiSelectBtn" title="Seleccionar expresión">🔗</button>
     <button class="icon-btn" id="deleteLessonBtn">🗑️</button>
   </div>
   <h2 id="readerTitle" class="reader-title"></h2>
   <div id="readerContent" class="reader-content"></div>
+
+  <div id="multiSelectBar" class="multiselect-bar hidden">
+    <span id="multiSelectCount">0 palabras</span>
+    <div>
+      <button class="btn-secondary" id="multiSelectCancel">Cancelar</button>
+      <button class="btn-primary" id="multiSelectSave" style="width:auto; display:inline-block;">Guardar expresión</button>
+    </div>
+  </div>
 </section>
 
 <!-- ---------- TELA: VOCABULÁRIO ---------- -->
@@ -137,6 +146,14 @@
     <input type="text" id="popupCategory" placeholder="Categoria (verbo, viagem...)">
     <button id="popupListenBtn" class="btn-secondary" title="Ouvir pronúncia">🔊 Ouvir</button>
     <button id="popupTranslateBtn" class="btn-secondary">Traduzir (Google)</button>
+  </div>
+  <button id="toggleVerbBtn" class="chip" style="margin-top:10px;">🔤 Es un verbo — conjugar</button>
+  <div id="verbSection" class="verb-section hidden">
+    <div class="popup-row">
+      <input type="text" id="popupInfinitive" placeholder="Infinitivo (ej: decidir)">
+      <button id="generateConjBtn" class="btn-secondary">Conjugar</button>
+    </div>
+    <div id="conjugationTable" class="conjugation-table"></div>
   </div>
   <p id="popupExample" class="popup-example"></p>
 </div>
