@@ -83,7 +83,58 @@ No celular, use "Adicionar à tela inicial" (Chrome/Safari) para instalar como a
 
 ---
 
+## Lembrete diário (notificação push gratuita, mesmo com o app fechado)
+
+Isso usa dois recursos gratuitos combinados: os **gatilhos automáticos do
+Apps Script** (roda no servidor do Google todo dia, sem precisar do seu
+celular ligado) e o **[ntfy.sh](https://ntfy.sh)** (serviço de notificação
+push, gratuito, sem necessidade de conta).
+
+**1. Escolha um "canal" secreto**
+No `Code.gs`, encontre a linha `const NTFY_TOPIC = '';` e preencha com um
+nome único e difícil de adivinhar, tipo `espanolia-joao8823` (evite algo
+genérico — quem souber o nome recebe suas notificações também). Salve e
+gere uma nova versão da implantação.
+
+**2. Instale o app ntfy no celular**
+- Android: [Google Play](https://play.google.com/store/apps/details?id=io.heckel.ntfy)
+- iPhone: [App Store](https://apps.apple.com/app/ntfy/id1625396347)
+- Abra o app, toque em "+", cole exatamente o mesmo nome de canal que você
+  colocou em `NTFY_TOPIC`, e pronto — está inscrito.
+
+**3. Configure o gatilho automático no Apps Script**
+1. No editor do Apps Script, clique no ícone de **relógio ⏰ (Gatilhos)** na barra lateral esquerda
+2. **+ Adicionar gatilho**
+3. Função a executar: `sendDailyReminder`
+4. Fonte do evento: **Baseado em tempo**
+5. Tipo de gatilho: **Cronômetro diário**
+6. Escolha o horário (ex: entre 9h e 10h)
+7. Salvar (autorize se pedir)
+
+Pronto — todo dia nesse horário, se você tiver palavras pendentes de
+revisão, vai chegar uma notificação no seu celular. Se não tiver nada
+pendente, ele não manda nada (não enche seu celular à toa).
+
+## Conjugador de verbos
+
+Ao marcar uma categoria como verbo no popup da palavra (botão "🔤 Es un
+verbo — conjugar"), o app tenta adivinhar o infinitivo automaticamente e
+gera uma tabela com Presente, Pretérito indefinido, Imperfecto, Futuro,
+Condicional e Subjuntivo presente — tudo calculado no próprio app (offline,
+sem depender de nenhuma API paga). Como adivinhar o infinitivo a partir de
+uma palavra conjugada é difícil de acertar sempre, o campo é editável:
+confira o palpite antes de gerar a tabela, e corrija se precisar.
+
+## Expressões (frases)
+
+No leitor, toque no ícone 🔗 no topo para ativar o "modo expressão". Toque
+em várias palavras seguidas (elas ficam destacadas em dourado) e depois em
+"Guardar expresión" — a frase inteira é salva no seu vocabulário como uma
+única entrada, com a categoria "expresión" já preenchida.
+
 ## Notas técnicas
+
+
 
 - A tradução usa `LanguageApp.translate()`, nativo do Google Apps Script —
   **gratuito e sem necessidade de chave de API**.
