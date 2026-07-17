@@ -812,6 +812,12 @@ function stopAnyAudio() {
   if (el) el.pause();
 }
 
+document.getElementById('openOriginalBtn').addEventListener('click', () => {
+  if (state.currentLesson && state.currentLesson.source) {
+    window.open(state.currentLesson.source, '_blank');
+  }
+});
+
 document.getElementById('backFromReader').addEventListener('click', () => { stopAnyAudio(); showView('import'); });
 
 document.getElementById('deleteLessonBtn').addEventListener('click', async () => {
