@@ -321,22 +321,42 @@ async function openSourceHeadlines(src) {
 function parseHeadlines(markdown, baseUrl) {
   const domain = new URL(baseUrl).hostname.replace('www.', '');
   // Captura opcionalmente uma imagem logo antes do link do título
-  const regex = /(?:!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)[^\[]{0,200})?\[([^\]]{20,160})\]\((https?:\/\/[^\s)]+)\)/g;
+  const regex = /(?:!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)[^\[]{0,200})?\[([^\]]{15,180})\]\((https?:\/\/[^\s)]+)\)/g;
+
+  // Palavras/frases típicas de menu, seção ou navegação — não são matérias
+  const NAV_WORDS = /^(inicio|home|menú|menu|contacto|suscr|login|iniciar sesión|síguenos|política de|aviso legal|más|editar|ver todo|ver más|últimas noticias|newsletters?|estados unidos|internacional|español|árabe|edición|mundo|economía|opinión|entretenimiento|deportes|salud|tecnología|ciencia|videos?|fotos?|podcasts?|en vivo|elecciones)$/i;
+
   const seen = new Set();
-  const results = [];
+  const dated = [];   // links de artigo de verdade (URL contém data) — prioridade máxima
+  const undated = [];  // reserva, caso não ache o suficiente com data
+
   let m;
   while ((m = regex.exec(markdown)) !== null) {
     const image = m[1] || null;
-    const title = m[2].trim();
+    const title = m[2].trim().replace(/\s+/g, ' ');
     const url = m[3];
+
     if (!url.includes(domain)) continue;
     if (seen.has(url)) continue;
-    if (/^(inicio|home|menú|menu|contacto|suscr|login|iniciar sesión|síguenos|política de|aviso legal)/i.test(title)) continue;
+    if (NAV_WORDS.test(title)) continue;
+    if (title.split(' ').length < 4) continue; // manchetes de verdade têm várias palavras
+
     seen.add(url);
-    results.push({ title, url, image });
-    if (results.length >= 25) break;
+    const item = { title, url, image };
+
+    // A maioria dos sites de notícia (CNN, BBC, El País...) coloca a data
+    // do artigo na própria URL, ex: /2026/07/16/... — isso quase nunca
+    // aparece em links de menu/categoria, então é o sinal mais confiável.
+    if (/\/\d{4}\/\d{1,2}\/\d{1,2}\//.test(url) || /-\d{8,}/.test(url)) {
+      dated.push(item);
+    } else {
+      undated.push(item);
+    }
+    if (dated.length >= 30) break;
   }
-  return results;
+
+  const results = dated.length >= 5 ? dated : [...dated, ...undated];
+  return results.slice(0, 25);
 }
 
 async function importAndOpen(title, url) {
