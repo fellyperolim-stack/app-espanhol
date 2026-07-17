@@ -179,7 +179,9 @@ document.getElementById('rateSelect').addEventListener('change', (e) => {
 
 function resetTTS() {
   speechSynthesis.cancel();
-  if (tts.currentAudio) { tts.currentAudio.pause(); tts.currentAudio = null; }
+  const el = document.getElementById('ttsAudioEl');
+  el.pause();
+  el.src = '';
   clearSpeakingHighlight();
   tts.playing = false;
   tts.index = 0;
@@ -200,18 +202,25 @@ document.getElementById('playPauseBtn').addEventListener('click', () => {
   if (tts.playing) {
     // pausar
     if (tts.mode === 'native') speechSynthesis.pause();
-    else if (tts.currentAudio) tts.currentAudio.pause();
+    else document.getElementById('ttsAudioEl').pause();
     tts.playing = false;
     document.getElementById('playPauseBtn').textContent = '▶️';
   } else if (tts.mode === 'native' && speechSynthesis.paused) {
     speechSynthesis.resume();
     tts.playing = true;
     document.getElementById('playPauseBtn').textContent = '⏸️';
-  } else if (tts.mode === 'online' && tts.currentAudio && tts.currentAudio.paused && tts.currentAudio.currentTime > 0) {
-    tts.currentAudio.play();
+  } else if (tts.mode === 'online' && document.getElementById('ttsAudioEl').src && document.getElementById('ttsAudioEl').paused && document.getElementById('ttsAudioEl').currentTime > 0) {
+    document.getElementById('ttsAudioEl').play();
     tts.playing = true;
     document.getElementById('playPauseBtn').textContent = '⏸️';
   } else {
+    // "Desbloqueia" o áudio no próprio clique (obrigatório em navegadores móveis) —
+    // toca um som silencioso primeiro, dentro do mesmo gesto de toque do usuário.
+    if (tts.mode === 'online') {
+      const el = document.getElementById('ttsAudioEl');
+      el.src = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADwAABpAAAACAAADSAAAAETEFN';
+      el.play().catch(() => {});
+    }
     tts.blocks = Array.from(document.querySelectorAll('#readerContent .reader-paragraph, #readerContent .reader-heading'));
     tts.index = 0;
     tts.playing = true;
@@ -271,34 +280,39 @@ function speakBlockOnline(blockEl) {
 
     playChunkViaBackend(chunks[ci])
       .then(() => { ci++; playNext(); })
-      .catch(async () => {
+      .catch((err1) => {
+        console.warn('Backend TTS falhou:', err1);
         // Reserva: tenta direto pelo serviço, caso o backend falhe
-        try {
-          await playChunkDirect(chunks[ci]);
-          ci++; playNext();
-        } catch (e) {
-          resetTTS();
-          alert('❌ No se pudo cargar la voz online en este momento. Verifica tu conexión o intenta más tarde.');
-        }
+        playChunkDirect(chunks[ci])
+          .then(() => { ci++; playNext(); })
+          .catch((err2) => {
+            resetTTS();
+            alert('❌ No se pudo reproducir el audio.\n\nDetalle técnico: ' + (err1 || '') + ' / ' + (err2 && err2.message ? err2.message : err2));
+          });
       });
   }
   playNext();
 }
 
 // Busca o áudio pelo backend do Apps Script (mais confiável — evita
-// bloqueios de rede que às vezes acontecem indo direto pelo celular)
+// bloqueios de rede que às vezes acontecem indo direto pelo celular).
+// Reaproveita o MESMO elemento <audio> sempre — trocar de elemento a cada
+// trecho é o que costuma disparar o bloqueio de autoplay em celulares.
 function playChunkViaBackend(text) {
   return new Promise(async (resolve, reject) => {
     try {
       const res = await api('tts', { text });
-      if (!res.audio) { reject(res.error || 'sem áudio'); return; }
-      const audio = new Audio(res.audio);
-      audio.playbackRate = tts.rate;
-      tts.currentAudio = audio;
-      audio.onended = resolve;
-      audio.onerror = () => reject('erro ao tocar');
-      audio.play().catch(reject);
-    } catch (e) { reject(e); }
+      if (!res.audio) { reject(res.error || 'sem áudio retornado pelo backend'); return; }
+      const el = document.getElementById('ttsAudioEl');
+      el.src = res.audio;
+      el.playbackRate = tts.rate;
+      el.onended = () => resolve();
+      el.onerror = () => reject('erro ao carregar áudio (formato/base64)');
+      const playPromise = el.play();
+      if (playPromise && playPromise.catch) {
+        playPromise.catch(e => reject('play() bloqueado: ' + e.name));
+      }
+    } catch (e) { reject(e.message || String(e)); }
   });
 }
 
@@ -306,12 +320,15 @@ function playChunkViaBackend(text) {
 function playChunkDirect(text) {
   return new Promise((resolve, reject) => {
     const audioUrl = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=es&q=' + encodeURIComponent(text);
-    const audio = new Audio(audioUrl);
-    audio.playbackRate = tts.rate;
-    tts.currentAudio = audio;
-    audio.onended = resolve;
-    audio.onerror = reject;
-    audio.play().catch(reject);
+    const el = document.getElementById('ttsAudioEl');
+    el.src = audioUrl;
+    el.playbackRate = tts.rate;
+    el.onended = () => resolve();
+    el.onerror = () => reject(new Error('erro ao carregar (rede bloqueou o domínio?)'));
+    const playPromise = el.play();
+    if (playPromise && playPromise.catch) {
+      playPromise.catch(e => reject(e));
+    }
   });
 }
 
