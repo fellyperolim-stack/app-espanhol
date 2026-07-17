@@ -162,6 +162,7 @@ if ('speechSynthesis' in window) {
 }
 
 document.getElementById('voiceSelect').addEventListener('change', (e) => {
+  if (tts.mode === 'online') return; // não há escolha de voz no modo online
   const voices = speechSynthesis.getVoices();
   tts.voice = voices.find(v => v.name === e.target.value) || null;
   localStorage.setItem(LS_VOICE, e.target.value);
@@ -255,10 +256,9 @@ function speakBlockNative(blockEl) {
 }
 
 // Modo de reserva: usa um serviço de voz online (não depende do celular ter
-// voz em espanhol instalada). Divide o texto em pedaços pequenos, já que o
-// serviço tem limite de caracteres por requisição.
+// voz em espanhol instalada). Divide o texto em pedaços pequenos.
 function speakBlockOnline(blockEl) {
-  const chunks = splitIntoTTSChunks(blockEl.textContent);
+  const chunks = splitIntoTTSChunks(blockEl.textContent, 180);
   let ci = 0;
   blockEl.classList.add('speaking-block');
 
@@ -268,19 +268,51 @@ function speakBlockOnline(blockEl) {
       if (tts.playing) { tts.index++; speakBlock(); }
       return;
     }
-    const audioUrl = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=es&q=' + encodeURIComponent(chunks[ci]);
+
+    playChunkViaBackend(chunks[ci])
+      .then(() => { ci++; playNext(); })
+      .catch(async () => {
+        // Reserva: tenta direto pelo serviço, caso o backend falhe
+        try {
+          await playChunkDirect(chunks[ci]);
+          ci++; playNext();
+        } catch (e) {
+          resetTTS();
+          alert('❌ No se pudo cargar la voz online en este momento. Verifica tu conexión o intenta más tarde.');
+        }
+      });
+  }
+  playNext();
+}
+
+// Busca o áudio pelo backend do Apps Script (mais confiável — evita
+// bloqueios de rede que às vezes acontecem indo direto pelo celular)
+function playChunkViaBackend(text) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const res = await api('tts', { text });
+      if (!res.audio) { reject(res.error || 'sem áudio'); return; }
+      const audio = new Audio(res.audio);
+      audio.playbackRate = tts.rate;
+      tts.currentAudio = audio;
+      audio.onended = resolve;
+      audio.onerror = () => reject('erro ao tocar');
+      audio.play().catch(reject);
+    } catch (e) { reject(e); }
+  });
+}
+
+// Reserva final: tenta direto pelo serviço do Google, sem passar pelo backend
+function playChunkDirect(text) {
+  return new Promise((resolve, reject) => {
+    const audioUrl = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=es&q=' + encodeURIComponent(text);
     const audio = new Audio(audioUrl);
     audio.playbackRate = tts.rate;
     tts.currentAudio = audio;
-
-    audio.onended = () => { ci++; playNext(); };
-    audio.onerror = () => {
-      resetTTS();
-      alert('❌ No se pudo cargar la voz online en este momento. Verifica tu conexión a internet.');
-    };
-    audio.play().catch(() => { resetTTS(); });
-  }
-  playNext();
+    audio.onended = resolve;
+    audio.onerror = reject;
+    audio.play().catch(reject);
+  });
 }
 
 function splitIntoTTSChunks(text, maxLen = 180) {
