@@ -1,4 +1,4 @@
-const CACHE = 'espanolia-v10'; // ⚠️ AUMENTE ESTE NÚMERO sempre que atualizar o app,
+const CACHE = 'espanolia-v11'; // ⚠️ AUMENTE ESTE NÚMERO sempre que atualizar o app,
                                // assim o celular é forçado a baixar a versão nova.
 const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
 
