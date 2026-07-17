@@ -106,6 +106,159 @@ async function boot() {
   }
 }
 
+/* ---------------- Conjugador de verbos ---------------- */
+
+const CONJ_TENSES = ['presente', 'preteritoIndefinido', 'imperfecto', 'futuro', 'condicional', 'subjuntivoPresente'];
+const CONJ_LABELS = {
+  presente: 'Presente', preteritoIndefinido: 'Pretérito indefinido', imperfecto: 'Imperfecto',
+  futuro: 'Futuro', condicional: 'Condicional', subjuntivoPresente: 'Subjuntivo presente'
+};
+const CONJ_PERSONS = ['yo', 'tú', 'él/ella/usted', 'nosotros', 'vosotros', 'ellos/ellas/ustedes'];
+
+// Verbos que fogem das regras (formato: presente, pretérito indefinido,
+// imperfecto e subjuntivo presente completos; futuro guardado só como raiz,
+// já que o condicional usa a mesma raiz — ex: "tendr" pra tener/tendré/tendría)
+const IRREGULAR_VERBS = {
+  ser: { presente: ['soy','eres','es','somos','sois','son'], preteritoIndefinido: ['fui','fuiste','fue','fuimos','fuisteis','fueron'], imperfecto: ['era','eras','era','éramos','erais','eran'], futuroStem: 'ser', subjuntivoPresente: ['sea','seas','sea','seamos','seáis','sean'] },
+  estar: { presente: ['estoy','estás','está','estamos','estáis','están'], preteritoIndefinido: ['estuve','estuviste','estuvo','estuvimos','estuvisteis','estuvieron'], imperfecto: ['estaba','estabas','estaba','estábamos','estabais','estaban'], futuroStem: 'estar', subjuntivoPresente: ['esté','estés','esté','estemos','estéis','estén'] },
+  ir: { presente: ['voy','vas','va','vamos','vais','van'], preteritoIndefinido: ['fui','fuiste','fue','fuimos','fuisteis','fueron'], imperfecto: ['iba','ibas','iba','íbamos','ibais','iban'], futuroStem: 'ir', subjuntivoPresente: ['vaya','vayas','vaya','vayamos','vayáis','vayan'] },
+  haber: { presente: ['he','has','ha','hemos','habéis','han'], preteritoIndefinido: ['hube','hubiste','hubo','hubimos','hubisteis','hubieron'], imperfecto: ['había','habías','había','habíamos','habíais','habían'], futuroStem: 'habr', subjuntivoPresente: ['haya','hayas','haya','hayamos','hayáis','hayan'] },
+  tener: { presente: ['tengo','tienes','tiene','tenemos','tenéis','tienen'], preteritoIndefinido: ['tuve','tuviste','tuvo','tuvimos','tuvisteis','tuvieron'], imperfecto: ['tenía','tenías','tenía','teníamos','teníais','tenían'], futuroStem: 'tendr', subjuntivoPresente: ['tenga','tengas','tenga','tengamos','tengáis','tengan'] },
+  hacer: { presente: ['hago','haces','hace','hacemos','hacéis','hacen'], preteritoIndefinido: ['hice','hiciste','hizo','hicimos','hicisteis','hicieron'], imperfecto: ['hacía','hacías','hacía','hacíamos','hacíais','hacían'], futuroStem: 'har', subjuntivoPresente: ['haga','hagas','haga','hagamos','hagáis','hagan'] },
+  poder: { presente: ['puedo','puedes','puede','podemos','podéis','pueden'], preteritoIndefinido: ['pude','pudiste','pudo','pudimos','pudisteis','pudieron'], imperfecto: ['podía','podías','podía','podíamos','podíais','podían'], futuroStem: 'podr', subjuntivoPresente: ['pueda','puedas','pueda','podamos','podáis','puedan'] },
+  querer: { presente: ['quiero','quieres','quiere','queremos','queréis','quieren'], preteritoIndefinido: ['quise','quisiste','quiso','quisimos','quisisteis','quisieron'], imperfecto: ['quería','querías','quería','queríamos','queríais','querían'], futuroStem: 'querr', subjuntivoPresente: ['quiera','quieras','quiera','queramos','queráis','quieran'] },
+  saber: { presente: ['sé','sabes','sabe','sabemos','sabéis','saben'], preteritoIndefinido: ['supe','supiste','supo','supimos','supisteis','supieron'], imperfecto: ['sabía','sabías','sabía','sabíamos','sabíais','sabían'], futuroStem: 'sabr', subjuntivoPresente: ['sepa','sepas','sepa','sepamos','sepáis','sepan'] },
+  poner: { presente: ['pongo','pones','pone','ponemos','ponéis','ponen'], preteritoIndefinido: ['puse','pusiste','puso','pusimos','pusisteis','pusieron'], imperfecto: ['ponía','ponías','ponía','poníamos','poníais','ponían'], futuroStem: 'pondr', subjuntivoPresente: ['ponga','pongas','ponga','pongamos','pongáis','pongan'] },
+  decir: { presente: ['digo','dices','dice','decimos','decís','dicen'], preteritoIndefinido: ['dije','dijiste','dijo','dijimos','dijisteis','dijeron'], imperfecto: ['decía','decías','decía','decíamos','decíais','decían'], futuroStem: 'dir', subjuntivoPresente: ['diga','digas','diga','digamos','digáis','digan'] },
+  venir: { presente: ['vengo','vienes','viene','venimos','venís','vienen'], preteritoIndefinido: ['vine','viniste','vino','vinimos','vinisteis','vinieron'], imperfecto: ['venía','venías','venía','veníamos','veníais','venían'], futuroStem: 'vendr', subjuntivoPresente: ['venga','vengas','venga','vengamos','vengáis','vengan'] },
+  dar: { presente: ['doy','das','da','damos','dais','dan'], preteritoIndefinido: ['di','diste','dio','dimos','disteis','dieron'], imperfecto: ['daba','dabas','daba','dábamos','dabais','daban'], futuroStem: 'dar', subjuntivoPresente: ['dé','des','dé','demos','deis','den'] },
+  ver: { presente: ['veo','ves','ve','vemos','veis','ven'], preteritoIndefinido: ['vi','viste','vio','vimos','visteis','vieron'], imperfecto: ['veía','veías','veía','veíamos','veíais','veían'], futuroStem: 'ver', subjuntivoPresente: ['vea','veas','vea','veamos','veáis','vean'] },
+  salir: { presente: ['salgo','sales','sale','salimos','salís','salen'], preteritoIndefinido: ['salí','saliste','salió','salimos','salisteis','salieron'], imperfecto: ['salía','salías','salía','salíamos','salíais','salían'], futuroStem: 'saldr', subjuntivoPresente: ['salga','salgas','salga','salgamos','salgáis','salgan'] },
+  traer: { presente: ['traigo','traes','trae','traemos','traéis','traen'], preteritoIndefinido: ['traje','trajiste','trajo','trajimos','trajisteis','trajeron'], imperfecto: ['traía','traías','traía','traíamos','traíais','traían'], futuroStem: 'traer', subjuntivoPresente: ['traiga','traigas','traiga','traigamos','traigáis','traigan'] },
+  oír: { presente: ['oigo','oyes','oye','oímos','oís','oyen'], preteritoIndefinido: ['oí','oíste','oyó','oímos','oísteis','oyeron'], imperfecto: ['oía','oías','oía','oíamos','oíais','oían'], futuroStem: 'oir', subjuntivoPresente: ['oiga','oigas','oiga','oigamos','oigáis','oigan'] },
+  jugar: { presente: ['juego','juegas','juega','jugamos','jugáis','juegan'], preteritoIndefinido: ['jugué','jugaste','jugó','jugamos','jugasteis','jugaron'], imperfecto: ['jugaba','jugabas','jugaba','jugábamos','jugabais','jugaban'], futuroStem: 'jugar', subjuntivoPresente: ['juegue','juegues','juegue','juguemos','juguéis','jueguen'] },
+  pensar: { presente: ['pienso','piensas','piensa','pensamos','pensáis','piensan'], preteritoIndefinido: ['pensé','pensaste','pensó','pensamos','pensasteis','pensaron'], imperfecto: ['pensaba','pensabas','pensaba','pensábamos','pensabais','pensaban'], futuroStem: 'pensar', subjuntivoPresente: ['piense','pienses','piense','pensemos','penséis','piensen'] },
+  volver: { presente: ['vuelvo','vuelves','vuelve','volvemos','volvéis','vuelven'], preteritoIndefinido: ['volví','volviste','volvió','volvimos','volvisteis','volvieron'], imperfecto: ['volvía','volvías','volvía','volvíamos','volvíais','volvían'], futuroStem: 'volver', subjuntivoPresente: ['vuelva','vuelvas','vuelva','volvamos','volváis','vuelvan'] },
+  dormir: { presente: ['duermo','duermes','duerme','dormimos','dormís','duermen'], preteritoIndefinido: ['dormí','dormiste','durmió','dormimos','dormisteis','durmieron'], imperfecto: ['dormía','dormías','dormía','dormíamos','dormíais','dormían'], futuroStem: 'dormir', subjuntivoPresente: ['duerma','duermas','duerma','durmamos','durmáis','duerman'] },
+  pedir: { presente: ['pido','pides','pide','pedimos','pedís','piden'], preteritoIndefinido: ['pedí','pediste','pidió','pedimos','pedisteis','pidieron'], imperfecto: ['pedía','pedías','pedía','pedíamos','pedíais','pedían'], futuroStem: 'pedir', subjuntivoPresente: ['pida','pidas','pida','pidamos','pidáis','pidan'] },
+  sentir: { presente: ['siento','sientes','siente','sentimos','sentís','sienten'], preteritoIndefinido: ['sentí','sentiste','sintió','sentimos','sentisteis','sintieron'], imperfecto: ['sentía','sentías','sentía','sentíamos','sentíais','sentían'], futuroStem: 'sentir', subjuntivoPresente: ['sienta','sientas','sienta','sintamos','sintáis','sientan'] },
+  seguir: { presente: ['sigo','sigues','sigue','seguimos','seguís','siguen'], preteritoIndefinido: ['seguí','seguiste','siguió','seguimos','seguisteis','siguieron'], imperfecto: ['seguía','seguías','seguía','seguíamos','seguíais','seguían'], futuroStem: 'seguir', subjuntivoPresente: ['siga','sigas','siga','sigamos','sigáis','sigan'] },
+  encontrar: { presente: ['encuentro','encuentras','encuentra','encontramos','encontráis','encuentran'], preteritoIndefinido: ['encontré','encontraste','encontró','encontramos','encontrasteis','encontraron'], imperfecto: ['encontraba','encontrabas','encontraba','encontrábamos','encontrabais','encontraban'], futuroStem: 'encontrar', subjuntivoPresente: ['encuentre','encuentres','encuentre','encontremos','encontréis','encuentren'] },
+  contar: { presente: ['cuento','cuentas','cuenta','contamos','contáis','cuentan'], preteritoIndefinido: ['conté','contaste','contó','contamos','contasteis','contaron'], imperfecto: ['contaba','contabas','contaba','contábamos','contabais','contaban'], futuroStem: 'contar', subjuntivoPresente: ['cuente','cuentes','cuente','contemos','contéis','cuenten'] },
+  empezar: { presente: ['empiezo','empiezas','empieza','empezamos','empezáis','empiezan'], preteritoIndefinido: ['empecé','empezaste','empezó','empezamos','empezasteis','empezaron'], imperfecto: ['empezaba','empezabas','empezaba','empezábamos','empezabais','empezaban'], futuroStem: 'empezar', subjuntivoPresente: ['empiece','empieces','empiece','empecemos','empecéis','empiecen'] },
+  cerrar: { presente: ['cierro','cierras','cierra','cerramos','cerráis','cierran'], preteritoIndefinido: ['cerré','cerraste','cerró','cerramos','cerrasteis','cerraron'], imperfecto: ['cerraba','cerrabas','cerraba','cerrábamos','cerrabais','cerraban'], futuroStem: 'cerrar', subjuntivoPresente: ['cierre','cierres','cierre','cerremos','cerréis','cierren'] },
+  morir: { presente: ['muero','mueres','muere','morimos','morís','mueren'], preteritoIndefinido: ['morí','moriste','murió','morimos','moristeis','murieron'], imperfecto: ['moría','morías','moría','moríamos','moríais','morían'], futuroStem: 'morir', subjuntivoPresente: ['muera','mueras','muera','muramos','muráis','mueran'] },
+  llegar: { presente: ['llego','llegas','llega','llegamos','llegáis','llegan'], preteritoIndefinido: ['llegué','llegaste','llegó','llegamos','llegasteis','llegaron'], imperfecto: ['llegaba','llegabas','llegaba','llegábamos','llegabais','llegaban'], futuroStem: 'llegar', subjuntivoPresente: ['llegue','llegues','llegue','lleguemos','lleguéis','lleguen'] }
+};
+
+const COND_ENDINGS = ['ía', 'ías', 'ía', 'íamos', 'íais', 'ían'];
+const FUT_ENDINGS = ['é', 'ás', 'á', 'emos', 'éis', 'án'];
+
+function regularConjugate(infinitive, tense) {
+  const ending = infinitive.slice(-2);
+  const stem = infinitive.slice(0, -2);
+  const isAr = ending === 'ar';
+
+  const endingsByTense = {
+    presente: isAr ? ['o','as','a','amos','áis','an'] : ['o','es','e', ending === 'er' ? 'emos' : 'imos', ending === 'er' ? 'éis' : 'ís', 'en'],
+    preteritoIndefinido: isAr ? ['é','aste','ó','amos','asteis','aron'] : ['í','iste','ió','imos','isteis','ieron'],
+    imperfecto: isAr ? ['aba','abas','aba','ábamos','abais','aban'] : ['ía','ías','ía','íamos','íais','ían'],
+    subjuntivoPresente: isAr ? ['e','es','e','emos','éis','en'] : ['a','as','a','amos','áis','an']
+  };
+
+  return endingsByTense[tense].map(end => stem + end);
+}
+
+function buildConjugationTable(infinitiveRaw) {
+  const infinitive = infinitiveRaw.trim().toLowerCase();
+  if (!/^(.+)(ar|er|ir)$/.test(infinitive)) return null;
+
+  const irregular = IRREGULAR_VERBS[infinitive];
+  const table = {};
+
+  ['presente', 'preteritoIndefinido', 'imperfecto', 'subjuntivoPresente'].forEach(tense => {
+    table[tense] = (irregular && irregular[tense]) ? irregular[tense] : regularConjugate(infinitive, tense);
+  });
+
+  const futuroStem = irregular ? irregular.futuroStem : infinitive;
+  table.futuro = FUT_ENDINGS.map(end => futuroStem + end);
+  table.condicional = COND_ENDINGS.map(end => futuroStem + end);
+
+  return table;
+}
+
+// Tenta adivinhar o infinitivo a partir de uma forma conjugada.
+// É um heurístico simples — sempre deixa o usuário corrigir na tela.
+function guessInfinitive(word) {
+  const w = word.trim().toLowerCase();
+
+  // 1) Já é um infinitivo?
+  if (/^.+(ar|er|ir)$/.test(w) && w.length > 3) {
+    // mas confere primeiro se não é uma forma irregular que termina coincidentemente em ar/er/ir
+    for (const inf in IRREGULAR_VERBS) {
+      const forms = IRREGULAR_VERBS[inf];
+      for (const t of ['presente','preteritoIndefinido','imperfecto','subjuntivoPresente']) {
+        if (forms[t] && forms[t].includes(w)) return inf;
+      }
+    }
+    return w;
+  }
+
+  // 2) Bate com alguma forma irregular conhecida?
+  for (const inf in IRREGULAR_VERBS) {
+    const forms = IRREGULAR_VERBS[inf];
+    for (const t of ['presente','preteritoIndefinido','imperfecto','subjuntivoPresente']) {
+      if (forms[t] && forms[t].includes(w)) return inf;
+    }
+  }
+
+  // 3) Palpites por terminação comum (regular)
+  if (/aron$/.test(w)) return w.slice(0, -4) + 'ar';
+  if (/ieron$/.test(w)) return w.slice(0, -5) + 'er';
+  if (/(aba|abas|ábamos|abais|aban)$/.test(w)) return w.replace(/(aba|abas|ábamos|abais|aban)$/, '') + 'ar';
+  if (/(ía|ías|íamos|íais|ían)$/.test(w)) return w.replace(/(ía|ías|íamos|íais|ían)$/, '') + 'er';
+  if (/ió$/.test(w)) return w.slice(0, -2) + 'er';
+  if (/ó$/.test(w)) return w.slice(0, -1) + 'ar';
+  if (/o$/.test(w)) return w.slice(0, -1) + 'ar';
+
+  return ''; // não conseguiu adivinhar — usuário digita manualmente
+}
+
+function renderConjugationTable(table) {
+  if (!table) return '<p class="hint">Infinitivo inválido — deve terminar em -ar, -er ou -ir.</p>';
+  let html = '';
+  CONJ_TENSES.forEach(tense => {
+    html += `<div class="conj-tense-block">
+      <div class="conj-tense-title">${CONJ_LABELS[tense]}</div>
+      <div class="conj-grid">`;
+    table[tense].forEach((form, i) => {
+      html += `<div class="conj-person">${CONJ_PERSONS[i]}</div><div class="conj-form">${escapeHtml(form)}</div>`;
+    });
+    html += `</div></div>`;
+  });
+  return html;
+}
+
+document.getElementById('toggleVerbBtn').addEventListener('click', () => {
+  const section = document.getElementById('verbSection');
+  section.classList.toggle('hidden');
+  if (!section.classList.contains('hidden') && !document.getElementById('popupInfinitive').value) {
+    const guess = guessInfinitive(popupContext ? popupContext.rawText : '');
+    document.getElementById('popupInfinitive').value = guess;
+    if (guess) renderAndShowConjugation(guess);
+  }
+});
+
+document.getElementById('generateConjBtn').addEventListener('click', () => {
+  const inf = document.getElementById('popupInfinitive').value.trim();
+  renderAndShowConjugation(inf);
+});
+
+function renderAndShowConjugation(infinitive) {
+  const table = infinitive ? buildConjugationTable(infinitive) : null;
+  document.getElementById('conjugationTable').innerHTML = renderConjugationTable(table);
+}
+
 /* ---------------- Ouvir pronúncia (Text-to-Speech) ---------------- */
 
 const LS_VOICE = 'espanolia_voice';
@@ -183,6 +336,70 @@ document.getElementById('popupListenBtn').addEventListener('click', () => {
     ttsUnlocked = true;
   }
   if (popupContext) speakPhrase(popupContext.rawText);
+});
+
+/* ---------------- Modo expressão (seleção múltipla de palavras) ---------------- */
+
+let multiSelect = { active: false, spans: [] };
+
+document.getElementById('multiSelectBtn').addEventListener('click', () => {
+  multiSelect.active = !multiSelect.active;
+  document.getElementById('multiSelectBtn').style.background = multiSelect.active ? 'var(--gold)' : '';
+  if (!multiSelect.active) clearMultiSelect();
+  document.getElementById('multiSelectBar').classList.toggle('hidden', !multiSelect.active || multiSelect.spans.length === 0);
+});
+
+function toggleMultiSelectWord(span) {
+  const idx = multiSelect.spans.indexOf(span);
+  if (idx === -1) {
+    multiSelect.spans.push(span);
+    span.classList.add('multi-selected');
+  } else {
+    multiSelect.spans.splice(idx, 1);
+    span.classList.remove('multi-selected');
+  }
+  // mantém a ordem de leitura (posição no documento), não a ordem de clique
+  multiSelect.spans.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+
+  const count = multiSelect.spans.length;
+  document.getElementById('multiSelectCount').textContent = `${count} palabra${count !== 1 ? 's' : ''}`;
+  document.getElementById('multiSelectBar').classList.toggle('hidden', count === 0);
+}
+
+function clearMultiSelect() {
+  multiSelect.spans.forEach(s => s.classList.remove('multi-selected'));
+  multiSelect.spans = [];
+  document.getElementById('multiSelectBar').classList.add('hidden');
+}
+
+document.getElementById('multiSelectCancel').addEventListener('click', () => {
+  clearMultiSelect();
+  multiSelect.active = false;
+  document.getElementById('multiSelectBtn').style.background = '';
+  document.getElementById('multiSelectBar').classList.add('hidden');
+});
+
+document.getElementById('multiSelectSave').addEventListener('click', () => {
+  if (!multiSelect.spans.length) return;
+  const phrase = multiSelect.spans.map(s => s.textContent).join(' ');
+
+  // Reaproveita o mesmo popup de palavra, mas com a frase inteira
+  popupContext = { word: phrase, rawText: phrase, existing: null };
+  document.getElementById('popupWord').textContent = phrase;
+  document.getElementById('popupTranslation').value = '';
+  document.getElementById('popupCategory').value = 'expresión';
+  document.getElementById('popupExample').textContent = '';
+  document.getElementById('popupDelete').classList.add('hidden');
+  document.getElementById('verbSection').classList.add('hidden');
+  document.getElementById('popupInfinitive').value = '';
+
+  document.getElementById('wordPopup').classList.remove('hidden');
+  document.getElementById('popupOverlay').classList.remove('hidden');
+
+  // sai do modo seleção (a limpeza visual das palavras acontece ao fechar o popup)
+  multiSelect.active = false;
+  document.getElementById('multiSelectBtn').style.background = '';
+  document.getElementById('multiSelectBar').classList.add('hidden');
 });
 
 /* ---------------- Fuentes (sites de notícias) ---------------- */
@@ -555,7 +772,10 @@ function appendTokenizedWords(container, text) {
       span.textContent = tok.text;
       span.dataset.word = normalizeWord(tok.text);
       markIfSaved(span);
-      span.addEventListener('click', () => openWordPopup(span));
+      span.addEventListener('click', () => {
+        if (multiSelect.active) { toggleMultiSelectWord(span); }
+        else { openWordPopup(span); }
+      });
       container.appendChild(span);
     } else {
       const span = document.createElement('span');
@@ -625,12 +845,26 @@ function openWordPopup(span) {
 
   document.getElementById('wordPopup').classList.remove('hidden');
   document.getElementById('popupOverlay').classList.remove('hidden');
+
+  if (existing && existing.infinitive) {
+    document.getElementById('verbSection').classList.remove('hidden');
+    document.getElementById('popupInfinitive').value = existing.infinitive;
+    renderAndShowConjugation(existing.infinitive);
+  } else {
+    document.getElementById('verbSection').classList.add('hidden');
+    document.getElementById('popupInfinitive').value = '';
+    document.getElementById('conjugationTable').innerHTML = '';
+  }
 }
 
 function closeWordPopup() {
   document.getElementById('wordPopup').classList.add('hidden');
   document.getElementById('popupOverlay').classList.add('hidden');
   if (state.activeWordEl) state.activeWordEl.classList.remove('active-word');
+  clearMultiSelect();
+  document.getElementById('verbSection').classList.add('hidden');
+  document.getElementById('popupInfinitive').value = '';
+  document.getElementById('conjugationTable').innerHTML = '';
 }
 
 document.getElementById('popupClose').addEventListener('click', closeWordPopup);
@@ -662,7 +896,9 @@ document.getElementById('popupSave').addEventListener('click', async () => {
   if (!popupContext) return;
   const translation = document.getElementById('popupTranslation').value.trim();
   const category = document.getElementById('popupCategory').value.trim();
-  const example = getContextSentence(state.activeWordEl);
+  const infinitive = document.getElementById('verbSection').classList.contains('hidden')
+    ? '' : document.getElementById('popupInfinitive').value.trim();
+  const example = state.activeWordEl ? getContextSentence(state.activeWordEl) : '';
   const wordSpan = state.activeWordEl;
 
   // Fecha o popup e atualiza a tela na hora (não espera a rede)
@@ -670,21 +906,21 @@ document.getElementById('popupSave').addEventListener('click', async () => {
 
   if (popupContext.existing) {
     // Atualiza localmente
-    Object.assign(popupContext.existing, { translation, category });
-    markIfSaved(wordSpan);
-    api('updateWord', { id: popupContext.existing.id, translation, category })
+    Object.assign(popupContext.existing, { translation, category, infinitive });
+    if (wordSpan) markIfSaved(wordSpan);
+    api('updateWord', { id: popupContext.existing.id, translation, category, infinitive })
       .catch(e => console.error('Erro ao atualizar:', e));
   } else {
     // Cria um item temporário local com id provisório até a API responder
     const tempId = 'temp_' + Date.now();
     const newItem = {
-      id: tempId, word: popupContext.rawText, translation, category, example,
+      id: tempId, word: popupContext.rawText, translation, category, example, infinitive,
       box: 1, dateAdded: new Date().toISOString()
     };
     state.vocab.push(newItem);
-    markIfSaved(wordSpan);
+    if (wordSpan) markIfSaved(wordSpan);
     try {
-      const res = await api('saveWord', { word: popupContext.rawText, translation, category, example });
+      const res = await api('saveWord', { word: popupContext.rawText, translation, category, example, infinitive });
       if (res.id) newItem.id = res.id; // troca pelo id real da planilha
     } catch (e) {
       console.error('Erro ao salvar:', e);
