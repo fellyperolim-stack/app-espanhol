@@ -116,7 +116,9 @@ let tts = {
   index: 0,
   playing: false,
   voice: null,
-  rate: Number(localStorage.getItem(LS_RATE)) || 1
+  rate: Number(localStorage.getItem(LS_RATE)) || 1,
+  mode: 'native',  // 'native' (voz do sistema) ou 'online' (reserva, via internet)
+  currentAudio: null
 };
 
 function populateVoiceList(retries = 10) {
@@ -133,6 +135,7 @@ function populateVoiceList(retries = 10) {
   select.innerHTML = '';
 
   if (voices.length) {
+    tts.mode = 'native';
     const savedName = localStorage.getItem(LS_VOICE);
     voices.forEach(v => {
       const opt = document.createElement('option');
@@ -143,20 +146,11 @@ function populateVoiceList(retries = 10) {
     const match = voices.find(v => v.name === savedName) || voices.find(v => v.lang === 'es-ES') || voices[0];
     select.value = match.name;
     tts.voice = match;
-  } else if (allVoices.length) {
-    // Não achou voz em espanhol, mas existem outras — mostra todas como reserva
-    allVoices.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.name;
-      opt.textContent = `${v.name} (${v.lang})`;
-      select.appendChild(opt);
-    });
-    tts.voice = allVoices[0];
-    console.warn('Nenhuma voz em espanhol encontrada. Usando voz disponível: ' + allVoices[0].name);
   } else {
-    // De verdade não tem nenhuma voz disponível neste navegador
+    // Não há nenhuma voz em espanhol instalada no aparelho — usa voz online de reserva
+    tts.mode = 'online';
     const opt = document.createElement('option');
-    opt.textContent = 'Sin voces — abre en Chrome';
+    opt.textContent = '🌐 Voz online (automática)';
     select.appendChild(opt);
     tts.voice = null;
   }
@@ -184,6 +178,7 @@ document.getElementById('rateSelect').addEventListener('change', (e) => {
 
 function resetTTS() {
   speechSynthesis.cancel();
+  if (tts.currentAudio) { tts.currentAudio.pause(); tts.currentAudio = null; }
   clearSpeakingHighlight();
   tts.playing = false;
   tts.index = 0;
@@ -192,19 +187,27 @@ function resetTTS() {
 
 function clearSpeakingHighlight() {
   document.querySelectorAll('.word.speaking').forEach(el => el.classList.remove('speaking'));
+  document.querySelectorAll('.speaking-block').forEach(el => el.classList.remove('speaking-block'));
 }
 
 document.getElementById('playPauseBtn').addEventListener('click', () => {
-  if (!('speechSynthesis' in window)) {
+  if (tts.mode === 'native' && !('speechSynthesis' in window)) {
     alert('Tu navegador no soporta lectura en voz alta.');
     return;
   }
+
   if (tts.playing) {
-    speechSynthesis.pause();
+    // pausar
+    if (tts.mode === 'native') speechSynthesis.pause();
+    else if (tts.currentAudio) tts.currentAudio.pause();
     tts.playing = false;
     document.getElementById('playPauseBtn').textContent = '▶️';
-  } else if (speechSynthesis.paused) {
+  } else if (tts.mode === 'native' && speechSynthesis.paused) {
     speechSynthesis.resume();
+    tts.playing = true;
+    document.getElementById('playPauseBtn').textContent = '⏸️';
+  } else if (tts.mode === 'online' && tts.currentAudio && tts.currentAudio.paused && tts.currentAudio.currentTime > 0) {
+    tts.currentAudio.play();
     tts.playing = true;
     document.getElementById('playPauseBtn').textContent = '⏸️';
   } else {
@@ -220,32 +223,80 @@ document.getElementById('stopBtn').addEventListener('click', resetTTS);
 
 function speakBlock() {
   if (tts.index >= tts.blocks.length) { resetTTS(); return; }
-
   const blockEl = tts.blocks[tts.index];
+  blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  if (tts.mode === 'online') {
+    speakBlockOnline(blockEl);
+  } else {
+    speakBlockNative(blockEl);
+  }
+}
+
+function speakBlockNative(blockEl) {
   const text = blockEl.textContent;
   const utterance = new SpeechSynthesisUtterance(text);
   if (tts.voice) {
     utterance.voice = tts.voice;
     utterance.lang = tts.voice.lang;
   } else {
-    utterance.lang = 'es-ES'; // reserva, caso nenhuma voz específica tenha sido carregada ainda
+    utterance.lang = 'es-ES';
   }
   utterance.rate = tts.rate;
 
-  // Destaca a palavra sendo lida em tempo real, quando o navegador suporta
-  utterance.onboundary = (ev) => {
-    if (ev.name !== 'word' && ev.name !== undefined) { /* alguns navegadores não passam 'name' */ }
-    highlightCharIndex(blockEl, ev.charIndex);
-  };
-
+  utterance.onboundary = (ev) => highlightCharIndex(blockEl, ev.charIndex);
   utterance.onend = () => {
     clearSpeakingHighlight();
     if (tts.playing) { tts.index++; speakBlock(); }
   };
   utterance.onerror = () => { resetTTS(); };
 
-  blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
   speechSynthesis.speak(utterance);
+}
+
+// Modo de reserva: usa um serviço de voz online (não depende do celular ter
+// voz em espanhol instalada). Divide o texto em pedaços pequenos, já que o
+// serviço tem limite de caracteres por requisição.
+function speakBlockOnline(blockEl) {
+  const chunks = splitIntoTTSChunks(blockEl.textContent);
+  let ci = 0;
+  blockEl.classList.add('speaking-block');
+
+  function playNext() {
+    if (ci >= chunks.length) {
+      blockEl.classList.remove('speaking-block');
+      if (tts.playing) { tts.index++; speakBlock(); }
+      return;
+    }
+    const audioUrl = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=es&q=' + encodeURIComponent(chunks[ci]);
+    const audio = new Audio(audioUrl);
+    audio.playbackRate = tts.rate;
+    tts.currentAudio = audio;
+
+    audio.onended = () => { ci++; playNext(); };
+    audio.onerror = () => {
+      resetTTS();
+      alert('❌ No se pudo cargar la voz online en este momento. Verifica tu conexión a internet.');
+    };
+    audio.play().catch(() => { resetTTS(); });
+  }
+  playNext();
+}
+
+function splitIntoTTSChunks(text, maxLen = 180) {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let current = '';
+  sentences.forEach(s => {
+    if ((current + ' ' + s).trim().length > maxLen) {
+      if (current) chunks.push(current.trim());
+      current = s.length > maxLen ? s.slice(0, maxLen) : s;
+    } else {
+      current = (current + ' ' + s).trim();
+    }
+  });
+  if (current) chunks.push(current.trim());
+  return chunks.filter(c => c.length > 0);
 }
 
 function highlightCharIndex(blockEl, charIndex) {
