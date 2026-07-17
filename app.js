@@ -579,10 +579,11 @@ function parseHeadlines(markdown, baseUrl) {
 async function importAndOpen(title, url) {
   showLoading('Cargando noticia...');
   try {
-    const readerUrl = 'https://r.jina.ai/' + url;
+    // Usa Jina.ai em modo HTML (retorna HTML estruturado, não markdown)
+    const readerUrl = 'https://r.jina.ai/' + url + '/html';
     const res = await fetch(readerUrl);
     if (!res.ok) throw new Error('Falha ao acessar a notícia');
-    const content = cleanImportedText(await res.text());
+    const content = await res.text(); // Pega HTML direto, sem limpeza
 
     const saveRes = await apiPost('saveLesson', { title, source: url, content });
     if (saveRes.error) throw new Error(saveRes.error);
@@ -620,14 +621,14 @@ document.getElementById('doImportBtn').addEventListener('click', async () => {
     const url = document.getElementById('lessonUrl').value.trim();
     if (!url) return;
     source = url;
-    statusEl.textContent = 'Baixando e extraindo texto...';
+    statusEl.textContent = 'Baixando e extraindo conteúdo...';
     try {
-      // Usa o "reader" público do Jina AI para extrair texto legível de qualquer URL
-      // (evita problemas de CORS e já retorna texto limpo, sem HTML)
-      const readerUrl = 'https://r.jina.ai/' + url;
+      // Usa Jina.ai em modo HTML (retorna HTML estruturado, não markdown)
+      // Adiciona /html ao final da URL pra pedir HTML em vez de markdown
+      const readerUrl = 'https://r.jina.ai/' + url + '/html';
       const res = await fetch(readerUrl);
       if (!res.ok) throw new Error('Falha ao acessar a URL');
-      content = cleanImportedText(await res.text());
+      content = await res.text();
     } catch (e) {
       statusEl.textContent = '❌ Não consegui importar essa URL. Tente colar o texto diretamente.';
       return;
@@ -741,26 +742,76 @@ function openReader(lesson) {
   const contentEl = document.getElementById('readerContent');
   contentEl.innerHTML = '';
 
-  const blocks = (lesson.content || '').split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+  const content = lesson.content || '';
 
-  blocks.forEach(block => {
-    const headingMatch = block.match(/^(#{1,4})\s+(.*)$/);
-
-    if (headingMatch) {
-      const level = Math.min(headingMatch[1].length + 1, 4); // # -> h2, ## -> h3...
-      const el = document.createElement('h' + level);
-      el.className = 'reader-heading';
-      appendTokenizedWords(el, headingMatch[2]);
-      contentEl.appendChild(el);
-    } else {
-      const p = document.createElement('p');
-      p.className = 'reader-paragraph';
-      appendTokenizedWords(p, block);
-      contentEl.appendChild(p);
-    }
-  });
+  // Se o conteúdo é HTML (começa com < ou tem tags), renderiza direto
+  if (content.trim().startsWith('<') || content.includes('</')) {
+    contentEl.innerHTML = content;
+    // Adiciona os listeners de clique nas palavras do HTML
+    attachWordClickersToHTML(contentEl);
+  } else {
+    // Senão, processa como markdown/texto normal (sistema antigo)
+    const blocks = content.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+    blocks.forEach(block => {
+      const headingMatch = block.match(/^(#{1,4})\s+(.*)$/);
+      if (headingMatch) {
+        const level = Math.min(headingMatch[1].length + 1, 4);
+        const el = document.createElement('h' + level);
+        el.className = 'reader-heading';
+        appendTokenizedWords(el, headingMatch[2]);
+        contentEl.appendChild(el);
+      } else {
+        const p = document.createElement('p');
+        p.className = 'reader-paragraph';
+        appendTokenizedWords(p, block);
+        contentEl.appendChild(p);
+      }
+    });
+  }
 
   showView('reader');
+}
+
+// Percorre o HTML renderizado e adiciona listeners de clique nas palavras
+function attachWordClickersToHTML(container) {
+  const walker = document.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+
+  const nodesToReplace = [];
+  let textNode;
+  while (textNode = walker.nextNode()) {
+    if (textNode.textContent.trim().length > 0) {
+      nodesToReplace.push(textNode);
+    }
+  }
+
+  nodesToReplace.forEach(node => {
+    const tokens = tokenize(node.textContent);
+    const fragment = document.createDocumentFragment();
+
+    tokens.forEach(tok => {
+      if (tok.type === 'word') {
+        const span = document.createElement('span');
+        span.className = 'word';
+        span.textContent = tok.text;
+        span.dataset.word = normalizeWord(tok.text);
+        markIfSaved(span);
+        span.addEventListener('click', () => openWordPopup(span));
+        fragment.appendChild(span);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'punct';
+        span.textContent = tok.text;
+        fragment.appendChild(span);
+      }
+    });
+
+    node.parentNode.replaceChild(fragment, node);
+  });
 }
 
 function appendTokenizedWords(container, text) {
