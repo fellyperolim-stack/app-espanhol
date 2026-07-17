@@ -82,7 +82,7 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
 });
 
 document.getElementById('appTitle').addEventListener('click', () => {
-  if (typeof resetTTS === 'function') resetTTS();
+  stopAnyAudio();
   showView('import');
 });
 
@@ -106,52 +106,31 @@ async function boot() {
   }
 }
 
-/* ---------------- Leitor em voz alta (Text-to-Speech) ---------------- */
+/* ---------------- Ouvir pronúncia (Text-to-Speech) ---------------- */
 
 const LS_VOICE = 'espanolia_voice';
-const LS_RATE = 'espanolia_rate';
 
 let tts = {
-  blocks: [],      // elementos (parágrafos/títulos) na ordem de leitura
-  index: 0,
-  playing: false,
   voice: null,
-  rate: Number(localStorage.getItem(LS_RATE)) || 1,
-  mode: 'native',  // 'native' (voz do sistema) ou 'online' (reserva, via internet)
-  currentAudio: null
+  mode: 'native'  // 'native' (voz do sistema) ou 'online' (reserva, via internet)
 };
 
 function populateVoiceList(retries = 10) {
-  const select = document.getElementById('voiceSelect');
   const allVoices = speechSynthesis.getVoices();
   const voices = allVoices.filter(v => v.lang.toLowerCase().startsWith('es'));
 
   if (!allVoices.length && retries > 0) {
-    // Nenhuma voz carregou ainda (comum em alguns celulares) — tenta de novo
     setTimeout(() => populateVoiceList(retries - 1), 500);
     return;
   }
 
-  select.innerHTML = '';
-
   if (voices.length) {
     tts.mode = 'native';
     const savedName = localStorage.getItem(LS_VOICE);
-    voices.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.name;
-      opt.textContent = `${v.name} (${v.lang})`;
-      select.appendChild(opt);
-    });
     const match = voices.find(v => v.name === savedName) || voices.find(v => v.lang === 'es-ES') || voices[0];
-    select.value = match.name;
     tts.voice = match;
   } else {
-    // Não há nenhuma voz em espanhol instalada no aparelho — usa voz online de reserva
     tts.mode = 'online';
-    const opt = document.createElement('option');
-    opt.textContent = '🌐 Voz online (automática)';
-    select.appendChild(opt);
     tts.voice = null;
   }
 }
@@ -161,207 +140,50 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
-document.getElementById('voiceSelect').addEventListener('change', (e) => {
-  if (tts.mode === 'online') return; // não há escolha de voz no modo online
-  const voices = speechSynthesis.getVoices();
-  tts.voice = voices.find(v => v.name === e.target.value) || null;
-  localStorage.setItem(LS_VOICE, e.target.value);
-});
+let ttsUnlocked = false;
 
-document.getElementById('reloadVoicesBtn').addEventListener('click', () => {
-  populateVoiceList();
-});
+// Toca a pronúncia de uma palavra/frase curta. Usa a voz do sistema quando
+// disponível; senão, busca o áudio pelo backend (Apps Script) como reserva.
+async function speakPhrase(text) {
+  if (!text) return;
 
-document.getElementById('rateSelect').addEventListener('change', (e) => {
-  tts.rate = Number(e.target.value);
-  localStorage.setItem(LS_RATE, String(tts.rate));
-});
-
-function resetTTS() {
-  speechSynthesis.cancel();
-  const el = document.getElementById('ttsAudioEl');
-  el.pause();
-  el.src = '';
-  clearSpeakingHighlight();
-  tts.playing = false;
-  tts.index = 0;
-  document.getElementById('playPauseBtn').textContent = '▶️';
-}
-
-function clearSpeakingHighlight() {
-  document.querySelectorAll('.word.speaking').forEach(el => el.classList.remove('speaking'));
-  document.querySelectorAll('.speaking-block').forEach(el => el.classList.remove('speaking-block'));
-}
-
-document.getElementById('playPauseBtn').addEventListener('click', () => {
-  if (tts.mode === 'native' && !('speechSynthesis' in window)) {
-    alert('Tu navegador no soporta lectura en voz alta.');
+  if (tts.mode === 'native' && 'speechSynthesis' in window) {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (tts.voice) { u.voice = tts.voice; u.lang = tts.voice.lang; }
+    else u.lang = 'es-ES';
+    speechSynthesis.speak(u);
     return;
   }
 
-  if (tts.playing) {
-    // pausar
-    if (tts.mode === 'native') speechSynthesis.pause();
-    else document.getElementById('ttsAudioEl').pause();
-    tts.playing = false;
-    document.getElementById('playPauseBtn').textContent = '▶️';
-  } else if (tts.mode === 'native' && speechSynthesis.paused) {
-    speechSynthesis.resume();
-    tts.playing = true;
-    document.getElementById('playPauseBtn').textContent = '⏸️';
-  } else if (tts.mode === 'online' && document.getElementById('ttsAudioEl').src && document.getElementById('ttsAudioEl').paused && document.getElementById('ttsAudioEl').currentTime > 0) {
-    document.getElementById('ttsAudioEl').play();
-    tts.playing = true;
-    document.getElementById('playPauseBtn').textContent = '⏸️';
-  } else {
-    // "Desbloqueia" o áudio no próprio clique (obrigatório em navegadores móveis) —
-    // toca um som silencioso primeiro, dentro do mesmo gesto de toque do usuário.
-    if (tts.mode === 'online') {
-      const el = document.getElementById('ttsAudioEl');
-      el.src = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADwAABpAAAACAAADSAAAAETEFN';
-      el.play().catch(() => {});
-    }
-    tts.blocks = Array.from(document.querySelectorAll('#readerContent .reader-paragraph, #readerContent .reader-heading'));
-    tts.index = 0;
-    tts.playing = true;
-    document.getElementById('playPauseBtn').textContent = '⏸️';
-    speakBlock();
-  }
-});
-
-document.getElementById('stopBtn').addEventListener('click', resetTTS);
-
-function speakBlock() {
-  if (tts.index >= tts.blocks.length) { resetTTS(); return; }
-  const blockEl = tts.blocks[tts.index];
-  blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  if (tts.mode === 'online') {
-    speakBlockOnline(blockEl);
-  } else {
-    speakBlockNative(blockEl);
-  }
-}
-
-function speakBlockNative(blockEl) {
-  const text = blockEl.textContent;
-  const utterance = new SpeechSynthesisUtterance(text);
-  if (tts.voice) {
-    utterance.voice = tts.voice;
-    utterance.lang = tts.voice.lang;
-  } else {
-    utterance.lang = 'es-ES';
-  }
-  utterance.rate = tts.rate;
-
-  utterance.onboundary = (ev) => highlightCharIndex(blockEl, ev.charIndex);
-  utterance.onend = () => {
-    clearSpeakingHighlight();
-    if (tts.playing) { tts.index++; speakBlock(); }
-  };
-  utterance.onerror = () => { resetTTS(); };
-
-  speechSynthesis.speak(utterance);
-}
-
-// Modo de reserva: usa um serviço de voz online (não depende do celular ter
-// voz em espanhol instalada). Divide o texto em pedaços pequenos.
-function speakBlockOnline(blockEl) {
-  const chunks = splitIntoTTSChunks(blockEl.textContent, 180);
-  let ci = 0;
-  blockEl.classList.add('speaking-block');
-
-  function playNext() {
-    if (ci >= chunks.length) {
-      blockEl.classList.remove('speaking-block');
-      if (tts.playing) { tts.index++; speakBlock(); }
-      return;
-    }
-
-    playChunkViaBackend(chunks[ci])
-      .then(() => { ci++; playNext(); })
-      .catch((err1) => {
-        console.warn('Backend TTS falhou:', err1);
-        // Reserva: tenta direto pelo serviço, caso o backend falhe
-        playChunkDirect(chunks[ci])
-          .then(() => { ci++; playNext(); })
-          .catch((err2) => {
-            resetTTS();
-            alert('❌ No se pudo reproducir el audio.\n\nDetalle técnico: ' + (err1 || '') + ' / ' + (err2 && err2.message ? err2.message : err2));
-          });
-      });
-  }
-  playNext();
-}
-
-// Busca o áudio pelo backend do Apps Script (mais confiável — evita
-// bloqueios de rede que às vezes acontecem indo direto pelo celular).
-// Reaproveita o MESMO elemento <audio> sempre — trocar de elemento a cada
-// trecho é o que costuma disparar o bloqueio de autoplay em celulares.
-function playChunkViaBackend(text) {
-  return new Promise(async (resolve, reject) => {
+  // Modo online (reserva): reaproveita sempre o mesmo elemento <audio>
+  const el = document.getElementById('ttsAudioEl');
+  try {
+    const res = await api('tts', { text });
+    if (!res.audio) throw new Error(res.error || 'sem áudio');
+    el.src = res.audio;
+    await el.play();
+  } catch (e1) {
     try {
-      const res = await api('tts', { text });
-      if (!res.audio) { reject(res.error || 'sem áudio retornado pelo backend'); return; }
-      const el = document.getElementById('ttsAudioEl');
-      el.src = res.audio;
-      el.playbackRate = tts.rate;
-      el.onended = () => resolve();
-      el.onerror = () => reject('erro ao carregar áudio (formato/base64)');
-      const playPromise = el.play();
-      if (playPromise && playPromise.catch) {
-        playPromise.catch(e => reject('play() bloqueado: ' + e.name));
-      }
-    } catch (e) { reject(e.message || String(e)); }
-  });
-}
-
-// Reserva final: tenta direto pelo serviço do Google, sem passar pelo backend
-function playChunkDirect(text) {
-  return new Promise((resolve, reject) => {
-    const audioUrl = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=es&q=' + encodeURIComponent(text);
-    const el = document.getElementById('ttsAudioEl');
-    el.src = audioUrl;
-    el.playbackRate = tts.rate;
-    el.onended = () => resolve();
-    el.onerror = () => reject(new Error('erro ao carregar (rede bloqueou o domínio?)'));
-    const playPromise = el.play();
-    if (playPromise && playPromise.catch) {
-      playPromise.catch(e => reject(e));
+      el.src = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=es&q=' + encodeURIComponent(text);
+      await el.play();
+    } catch (e2) {
+      alert('❌ No se pudo reproducir el audio. Verifica tu conexión.');
     }
-  });
-}
-
-function splitIntoTTSChunks(text, maxLen = 180) {
-  const sentences = text.split(/(?<=[.!?])\s+/);
-  const chunks = [];
-  let current = '';
-  sentences.forEach(s => {
-    if ((current + ' ' + s).trim().length > maxLen) {
-      if (current) chunks.push(current.trim());
-      current = s.length > maxLen ? s.slice(0, maxLen) : s;
-    } else {
-      current = (current + ' ' + s).trim();
-    }
-  });
-  if (current) chunks.push(current.trim());
-  return chunks.filter(c => c.length > 0);
-}
-
-function highlightCharIndex(blockEl, charIndex) {
-  clearSpeakingHighlight();
-  let acc = 0;
-  for (const node of blockEl.childNodes) {
-    const len = (node.textContent || '').length;
-    if (charIndex >= acc && charIndex < acc + len) {
-      if (node.nodeType === 1 && node.classList && node.classList.contains('word')) {
-        node.classList.add('speaking');
-      }
-      break;
-    }
-    acc += len;
   }
 }
+
+document.getElementById('popupListenBtn').addEventListener('click', () => {
+  // "Desbloqueia" o elemento de áudio dentro do próprio clique (necessário
+  // em navegadores móveis, só precisa acontecer uma vez por sessão)
+  if (!ttsUnlocked) {
+    const el = document.getElementById('ttsAudioEl');
+    el.src = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADwAABpAAAACAAADSAAAAETEFN';
+    el.play().catch(() => {});
+    ttsUnlocked = true;
+  }
+  if (popupContext) speakPhrase(popupContext.rawText);
+});
 
 /* ---------------- Fuentes (sites de notícias) ---------------- */
 
@@ -676,7 +498,7 @@ function renderLessonList() {
 /* ---------------- Leitor ---------------- */
 
 function openReader(lesson) {
-  if (typeof resetTTS === 'function') resetTTS();
+  stopAnyAudio();
   state.currentLesson = lesson;
   document.getElementById('readerTitle').textContent = lesson.title;
   const contentEl = document.getElementById('readerContent');
@@ -744,12 +566,18 @@ function markIfSaved(span) {
   if (found) span.classList.add('saved-' + (found.box || 1));
 }
 
-document.getElementById('backFromReader').addEventListener('click', () => { resetTTS(); showView('import'); });
+function stopAnyAudio() {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  const el = document.getElementById('ttsAudioEl');
+  if (el) el.pause();
+}
+
+document.getElementById('backFromReader').addEventListener('click', () => { stopAnyAudio(); showView('import'); });
 
 document.getElementById('deleteLessonBtn').addEventListener('click', async () => {
   if (!state.currentLesson) return;
   if (!confirm('Excluir esta lição?')) return;
-  resetTTS();
+  stopAnyAudio();
   await api('deleteLesson', { id: state.currentLesson.id });
   await loadLessons();
   showView('import');
