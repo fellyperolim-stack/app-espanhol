@@ -283,6 +283,12 @@ h4.reader-heading{ font-size: 1.1em; color: var(--gold); }
   background:var(--gold) !important; color:#1a1400 !important;
   box-shadow: 0 0 0 2px var(--gold);
 }
+.reader-content .speaking-block{
+  background: rgba(241,191,0,.08);
+  border-radius: 10px;
+  box-shadow: inset 3px 0 0 var(--gold);
+  padding-left: 10px;
+}
 @media (min-width:700px){ .audio-player{ max-width:600px; margin:0 auto; } }
 
 /* ---- Bottom nav ---- */
